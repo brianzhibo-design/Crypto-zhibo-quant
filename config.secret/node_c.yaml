@@ -1,0 +1,340 @@
+exchanges:
+  bithumb:
+    enabled: true
+    markets_url: https://api.bithumb.com/public/ticker/ALL
+    poll_interval: 8
+    timeout: 15
+  coinone:
+    enabled: true
+    markets_url: https://api.coinone.co.kr/public/v2/markets/KRW
+    poll_interval: 10
+    timeout: 15
+  gopax:
+    enabled: true
+    markets_url: https://api.gopax.co.kr/trading-pairs
+    poll_interval: 10
+    timeout: 15
+  korbit:
+    enabled: true
+    markets_url: https://api.korbit.co.kr/v1/ticker/detailed/all
+    poll_interval: 10
+    timeout: 15
+  upbit:
+    announcement_url: https://api-manager.upbit.com/api/v1/notices
+    enabled: true
+    keywords:
+    - 마켓 추가
+    - 신규 상장
+    - 거래 지원
+    - 디지털 자산 추가
+    markets_url: https://api.upbit.com/v1/market/all
+    poll_interval: 8
+    timeout: 15
+heartbeat:
+  interval: 10
+logging:
+  file: collector_c.log
+  level: INFO
+node:
+  id: C
+  location: KR
+  name: Node C - Social Media Expert
+  role: social_monitor
+redis:
+  db: 0
+  host: 139.180.133.81
+  password: OiONEfYjv9qKxLrsrLe8b0Q+5Ik2fjibxmH6zAuZqhE=
+  port: 6379
+stream:
+  maxlen: 50000
+  raw_events: events:raw
+telegram:
+  bot_token: 8581582698:AAH_TwtUGA5tfbIm6oawiDWyJLTDvJ6VLBQ
+  channels:
+  - id: binance_announcements
+    name: Binance Announcements (exchanges)
+  - id: BinanceExchange
+    name: Binance English (exchanges)
+  - id: OKXAnnouncements
+    name: OKX Announcements (exchanges)
+  - id: OKX_Official
+    name: OKX_official (exchanges)
+  - id: Bybit_Announcements
+    name: Bybit Announcements (exchanges)
+  - id: BybitEN
+    name: BYBIT X (exchanges)
+  - id: GateioAnnouncements
+    name: Gateio announcements (exchanges)
+  - id: Gateio
+    name: Gate.io International (English) (exchanges)
+  - id: BitgetEnglish
+    name: BitgetEnglish (exchanges)
+  - id: KuCoin_News
+    name: KuCoin Announcement (exchanges)
+  - id: kucoinexchange
+    name: Kucoin exchange community (exchanges)
+  - id: MEXCEnglish
+    name: MEXC English (Official) (exchanges)
+  - id: MEXC_Official
+    name: Mexc Official (exchanges)
+  - id: HTX_Official
+    name: HTX (exchanges)
+  - id: HuobiGlobalOfficial
+    name: Huobi Official (exchanges)
+  - id: Bitfinex
+    name: Bitfinex (exchanges)
+  - id: BingXOfficial
+    name: BingX - Empowering Traders (exchanges)
+  - id: bingx_global
+    name: Bing x (exchanges)
+  - id: PhemexOfficial
+    name: . (exchanges)
+  - id: phemex
+    name: Phemex.com (exchanges)
+  - id: BitMartExchange
+    name: BitMart Exchange (exchanges)
+  - id: WhiteBIT_Official
+    name: Fjgkt (exchanges)
+  - id: whitebit
+    name: WhiteBIT News (exchanges)
+  - id: BloFin_Official
+    name: BloFin Exchange (exchanges)
+  - id: blofin
+    name: Blofin Community (exchanges)
+  - id: BackpackExchange
+    name: BackpackExchange (exchanges)
+  - id: wu_blockchain
+    name: 1 (news)
+  - id: PAnewsLab
+    name: PANews 加密货币冲锋队 (news)
+  - id: OdailyChina
+    name: https://t.me/OdailyChina (news)
+  - id: odaily_official
+    name: odaily_official (news)
+  - id: ForesightNews
+    name: Foresight News (news)
+  - id: foresight_news
+    name: Реген павер (news)
+  - id: BlockBeatsAsia
+    name: 全国莞式全套会所 (news)
+  - id: blockbeats
+    name: 区块律动BlockBeats (news)
+  - id: ChainCatcher
+    name: 链捕手 ChainCatcher (news)
+  - id: chaincatcher
+    name: 链捕手 ChainCatcher (news)
+  - id: TechFlowPost
+    name: 深潮研习社（🐂，🍺） (news)
+  - id: techflow_official
+    name: TechFlow📱 (news)
+  - id: marsbit
+    name: MΔRSβIT 🌗 | ᴄʀʏᴘᴛᴏ,ɴғᴛ,ᴍᴇᴛᴀᴠᴇʀsᴇ (news)
+  - id: TheBlockNews
+    name: Blocknews (news)
+  - id: CoinDesk_Official
+    name: Coindesk (news)
+  - id: coindesk
+    name: Coindesk (news)
+  - id: Cointelegraph
+    name: Cointelegraph (news)
+  - id: cointelegraph_official
+    name: COINTELEGRAPH (news)
+  - id: blockworks
+    name: selling handles (news)
+  - id: TheDefiant_io
+    name: The Defi antio (news)
+  - id: unchained
+    name: unchained (news)
+  - id: BanklessHQ
+    name: BanklessHQ (news)
+  - id: bankless
+    name: Bankless (placeholder by Bankless DACH) (news)
+  - id: coinlistingalerts
+    name: Coin Listing Alerts (alpha)
+  - id: coin_listing_alerts
+    name: COIN LISTING ALERT (alpha)
+  - id: cryptonewlistings
+    name: CMC Crypto Notifications (alpha)
+  - id: crypto_new_listings
+    name: Cryptocurrency new listings (alpha)
+  - id: new_listings_crypto
+    name: New Listings Crypto (alpha)
+  - id: ListingSpy
+    name: ListingSpy (alpha)
+  - id: listing_spy
+    name: Coin Listing Spy (alpha)
+  - id: CryptoListingAlert
+    name: Crypto Assistant (alpha)
+  - id: crypto_listing_alert
+    name: New Listing Alerts (alpha)
+  - id: new_coin_listings
+    name: New Crypto Listings | CoinMarketCap (alpha)
+  - id: GemHuntersTG
+    name: Gemhunters (alpha)
+  - id: DEXGems
+    name: DEXGems | Picking gems on ETH, BSC, DC and others (alpha)
+  - id: dex_gems
+    name: dex gems (alpha)
+  - id: BSCGems
+    name: BSC Gems (alpha)
+  - id: SolanaGems
+    name: Solana Gems (alpha)
+  - id: solana_gems
+    name: 𝐒𝐎𝐋A𝐍𝐀 𝐆𝐄𝐌𝐒 & 𝐍𝐅𝐓 𝐃𝐑𝐎𝐏𝐒 (alpha)
+  - id: BaseGems
+    name: Base Gems (alpha)
+  - id: base_gems
+    name: Base Gems (alpha)
+  - id: eth_gems
+    name: Eth Gems 💎 (alpha)
+  - id: crypto_alpha
+    name: crypto_alpha (alpha)
+  - id: defi_alpha
+    name: Defi alpha (alpha)
+  - id: MessariCrypto
+    name: Messari (alpha)
+  - id: messari
+    name: messari (alpha)
+  - id: delphi_digital
+    name: Delphi Digital (alpha)
+  - id: TheBlockResearch
+    name: The Block Research (alpha)
+  - id: arkham_intel
+    name: Arkham_intel (alpha)
+  - id: TokenTerminal
+    name: TokenTerminal (alpha)
+  - id: DefiLlama
+    name: DefiLlama (alpha)
+  - id: defillama
+    name: defillama (alpha)
+  - id: L2Beat
+    name: L2Beat (alpha)
+  - id: l2beat
+    name: l2beat (alpha)
+  - id: WhaleAlert
+    name: WhaleAlert (whale)
+  - id: whale_alert
+    name: Whale Alert (whale)
+  - id: lookonchain
+    name: Lookonchain (whale)
+  - id: lookonchain_official
+    name: Lookonchain (whale)
+  - id: spotonchain
+    name: SpotOnChain | Announcement (whale)
+  - id: ai_9684xtpa
+    name: Ai 姨 (whale)
+  - id: OnChainWizard
+    name: OnChainWizard (whale)
+  - id: onchain_wizard
+    name: onchain_wizard (whale)
+  - id: CryptoWhales
+    name: CryptoWhales (whale)
+  - id: crypto_whales
+    name: Crypto Whales - News & Updates (whale)
+  - id: WhaleRoom
+    name: Whale Room (whale)
+  - id: whale_room
+    name: 2whaleroom (whale)
+  - id: SmartMoneyTracker
+    name: ردیاب پول هوشمند (whale)
+  - id: WhaleMaps
+    name: Whalemap Announcements (whale)
+  - id: DeBank_Official
+    name: DeBank Channel (whale)
+  - id: ZerionHQ
+    name: Zerion —smart wallet for DeFi and NFTs (whale)
+  - id: ApeBoard
+    name: Ape Board (whale)
+  - id: apeboard
+    name: Ape Board (whale)
+  - id: ethereum
+    name: ethereum (projects)
+  - id: solana
+    name: Solana (projects)
+  - id: sui_official
+    name: sui_official (projects)
+  - id: aptos_official
+    name: Aptos Announcements (projects)
+  - id: avalancheavax
+    name: Avalanche (Official) (projects)
+  - id: nearprotocol
+    name: '[Placeholder] - taking nearprotocol link (projects)'
+  - id: cosmoshub
+    name: Cosmos Hub (projects)
+  - id: polkadot
+    name: polkadot (projects)
+  - id: ton_blockchain
+    name: Howard’s Insights (projects)
+  - id: arbitrum
+    name: Arbitrum Announcements Official (projects)
+  - id: optimismFND
+    name: optimismFND (projects)
+  - id: zkSync_official
+    name: zkSync 🚀 (projects)
+  - id: linea_build
+    name: Linea (projects)
+  - id: manta_official
+    name: manta_official (projects)
+  - id: blast_official
+    name: Blast Official Community (projects)
+  - id: CurveFinance
+    name: CurveFinance (projects)
+  - id: Lido_DAO
+    name: Lido DAO (projects)
+  - id: RocketPool
+    name: Rocket Pool (projects)
+  - id: GMX_IO
+    name: GMX (projects)
+  - id: Eigenlayer
+    name: EigenLayer (projects)
+  - id: Celestia_Org
+    name: Celestia Airdrop (projects)
+  - id: Monad_xyz
+    name: Monad Announcements (projects)
+  - id: Berachain
+    name: Berachain (projects)
+  enabled: true
+  keywords:
+  - listing
+  - listed
+  - list
+  - will list
+  - new listing
+  - new token
+  - deposit open
+  - trading open
+  - launches
+  - launched
+  - launch
+  - 上币
+  - 上线
+  - 即将上线
+  - open trading
+  - open deposit
+  - trading pair
+  - spot trading
+  - perpetual
+  - futures
+  - airdrop
+  - launchpool
+  - launchpad
+  - announcement
+  - notice
+  - update
+  - pump
+  - surge
+  - spike
+  - breakout
+  - whale
+  - alert
+  - 合约
+  - 现货
+  - 开盘
+  - 交易对
+  - 充值
+  - 提现
+telethon:
+  api_hash: c45b6967c9a30e3b12af0acab80b39a5
+  api_id: 36813855
+  enabled: true
+  session_name: crypto_monitor

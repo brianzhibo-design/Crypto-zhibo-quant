@@ -1,10 +1,5 @@
-# 敏感配置目录
-config.secret/
-.env
-
-# 备份文件
+# 备份文件 (大文件，不推送)
 backups/
-*.tar.gz
 
 # Python
 __pycache__/
@@ -19,8 +14,7 @@ venv/
 data/logs/
 data/redis_snapshots/
 
-# Telegram
-*.session
+# Telegram session journal (临时文件)
 *.session-journal
 
 # IDE

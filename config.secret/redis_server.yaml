@@ -1,0 +1,54 @@
+node:
+  id: "REDIS"
+  name: "Redis Server - Fusion Engine"
+  role: "fusion_engine"
+
+redis:
+  host: "127.0.0.1"
+  port: 6379
+  password: "OiONEfYjv9qKxLrsrLe8b0Q+5Ik2fjibxmH6zAuZqhE="
+  db: 0
+
+logging:
+  level: "INFO"
+  file: "/var/log/fusion_engine.log"
+
+stream:
+  raw_events: "events:raw"
+  fused_events: "events:fused"
+  maxlen_raw: 50000
+  maxlen_fused: 10000
+
+fusion:
+  aggregation_window_seconds: 10
+  dedup_ttl: 300
+  min_confidence: 0.70
+  min_score: 40
+  consumer_group: "fusion_engine_group"
+  consumer_name: "fusion_engine_1"
+  batch_size: 10
+  batch_timeout: 1000
+
+  # 权重
+  source_weights:
+    ws_market: 1.0
+    rest_api: 0.95
+    chain_contract: 0.85
+    kr_market: 0.80
+    social_twitter: 0.75
+    social_telegram: 0.65
+
+webhook:
+  url: "https://zhibot.app.n8n.cloud/webhook/crypto-signal"
+  retry_times: 3
+  retry_delay: 2
+  timeout: 10
+
+health:
+  check_interval: 30
+  node_timeout: 60
+
+# 企业微信推送
+wechat:
+  enabled: true
+  webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=1ceb8074-c3b7-4ea8-9267-e5b8d2c89355"

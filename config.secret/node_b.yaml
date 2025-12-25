@@ -1,0 +1,272 @@
+node:
+  id: "B"
+  name: "Node B - Blockchain Expert"
+  role: "blockchain_monitor"
+  location: "SG"
+
+redis:
+  host: "139.180.133.81"
+  port: 6379
+  password: "OiONEfYjv9qKxLrsrLe8b0Q+5Ik2fjibxmH6zAuZqhE="
+  db: 0
+
+logging:
+  level: "INFO"
+  file: "collector_b.log"
+
+heartbeat:
+  interval: 10
+
+blockchain:
+  ethereum:
+    enabled: true
+    rpc_url: "https://eth-mainnet.g.alchemy.com/v2/_1WESPntw1rwPyodMzDFF"
+    backup_rpc: "https://mainnet.infura.io/v3/dfd9336c60d7442b8c4b310bf42a422d"
+    contracts:
+      uniswap_v2_factory: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
+      uniswap_v3_factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984"
+      sushiswap_factory: "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac"
+    poll_interval: 12
+    blocks_lookback: 50
+  
+  bnb:
+    enabled: true
+    rpc_url: "https://bnb-mainnet.g.alchemy.com/v2/HflDOcVtGYSn-AFkUfW4l"
+    backup_rpc: "https://bsc-dataseed1.binance.org"
+    contracts:
+      pancakeswap_v2_factory: "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73"
+      pancakeswap_v3_factory: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865"
+      biswap_factory: "0x858E3312ed3A876947EA49d572A7C42DE08af7EE"
+    poll_interval: 10
+    blocks_lookback: 50
+  
+  solana:
+    enabled: true
+    rpc_url: "https://cosmopolitan-thrilling-ensemble.solana-mainnet.quiknode.pro/1b629c939576527eb372e9beec30c2ee629c319c/"
+    websocket_url: "wss://cosmopolitan-thrilling-ensemble.solana-mainnet.quiknode.pro/1b629c939576527eb372e9beec30c2ee629c319c/"
+    programs:
+      raydium_amm: "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
+      raydium_v4: "5quBtoiQqxF9Jv6KYKctB59NT3gtJD2Y65kdnB1Uev3h"
+      orca_whirlpool: "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
+    poll_interval: 10
+
+  arbitrum:
+    enabled: true
+    rpc_url: "https://arb1.arbitrum.io/rpc"
+    backup_rpc: "https://rpc.ankr.com/arbitrum"
+    contracts:
+      uniswap_v3_factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984"
+      sushiswap_factory: "0xc35DADB65012eC5796536bD9864eD8773aBc74C4"
+      camelot_factory: "0x6EcCab422D763aC031210895C81787E87B43A652"
+    poll_interval: 10
+    blocks_lookback: 100
+
+  base:
+    enabled: true
+    rpc_url: "https://mainnet.base.org"
+    backup_rpc: "https://base.llamarpc.com"
+    contracts:
+      uniswap_v3_factory: "0x33128a8fC17869897dcE68Ed026d694621f6FDfD"
+      aerodrome_factory: "0x420DD381b31aEf6683db6B902084cB0FFECe40Da"
+    poll_interval: 10
+    blocks_lookback: 100
+
+  polygon:
+    enabled: true
+    rpc_url: "https://polygon-rpc.com"
+    backup_rpc: "https://rpc.ankr.com/polygon"
+    contracts:
+      quickswap_v2_factory: "0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32"
+      uniswap_v3_factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984"
+    poll_interval: 10
+    blocks_lookback: 100
+
+  avalanche:
+    enabled: true
+    rpc_url: "https://api.avax.network/ext/bc/C/rpc"
+    backup_rpc: "https://rpc.ankr.com/avalanche"
+    contracts:
+      traderjoe_factory: "0x9Ad6C38BE94206cA50bb0d90783181662f0Cfa10"
+      pangolin_factory: "0xefa94DE7a4656D787667C749f7E1223D71E9FD88"
+    poll_interval: 10
+    blocks_lookback: 100
+
+stream:
+  raw_events: "events:raw"
+  maxlen: 50000
+
+# ========== Twitter 80+ 账号 ==========
+twitter:
+  enabled: true
+  bearer_token: "AAAAAAAAAAAAAAAAAAAAALV85gEAAAAAjbxUkJ1HRwUxKvtbNtAqjraBFfE%3DKAUKgVYXt4wZnAV4kT0x3GyhIqhfNmoAsDtkjwGtLtOA35DtGP"
+  api_key: "ykZiZrAyktX0xzmBeqr2YiM7n"
+  api_secret: "xPJwysEIptPm5haaEm32C0GLjdnBY2KXgdM3OEMn0rKhj8x61y"
+  access_token: "1743632124853538816-50HSeJdlZ3enwdpx2UW5enDvRUowon"
+  access_secret: "Imer1yV5RpSp3PoPjP7UCy6Qd5pXQw7qNTJXmD5m3sfP1"
+  poll_interval: 180  # 3分钟轮询
+  accounts:
+    # ===== 交易所官方 (20个) =====
+    - "binance"
+    - "caborsa"
+    - "okx"
+    - "Bybit_Official"
+    - "gate_io"
+    - "kaborsa"
+    - "bitget_global"
+    - "HTX_Global"
+    - "MEXC_Official"
+    - "coinbase"
+    - "kraborsa"
+    - "Aborsa"
+    - "baborsa"
+    - "BingXOfficial"
+    - "PhemexGlobal"
+    - "BitMartExchange"
+    - "LBank_Exchange"
+    - "WhiteBit"
+    - "BackpackExchange"
+    - "BloFin_Official"
+    # ===== 顶级 KOL (35个) =====
+    - "lookonchain"
+    - "EmberCN"
+    - "ai_9684xtpa"
+    - "spotonchain"
+    - "whale_alert"
+    - "DefiIgnas"
+    - "0xSisyphus"
+    - "inversebrah"
+    - "CryptoHayes"
+    - "novaborsa"
+    - "VitalikButerin"
+    - "caborsa"
+    - "AltcoinGordon"
+    - "TheCryptoDog"
+    - "CryptoCobain"
+    - "zaborsa"
+    - "blknoiz06"
+    - "CroissantEth"
+    - "Pentosh1"
+    - "GCRClassic"
+    - "CryptoKaleo"
+    - "HsakaTrades"
+    - "ColdBloodShill"
+    - "Darrenlautf"
+    - "MoonOverlord"
+    - "AndrewKang_"
+    - "Rewkang"
+    - "Maborsa"
+    - "cobie"
+    - "lightcaborsa"
+    - "DeFiMochi"
+    - "OnChainWizard"
+    - "zachxbt"
+    - "taaborsa"
+    - "0xLoki_"
+    # ===== 新闻媒体 (15个) =====
+    - "CoinDesk"
+    - "Cointelegraph"
+    - "TheBlock__"
+    - "Deaborsa"
+    - "WuBlockchain"
+    - "DocumentingBTC"
+    - "BitcoinMagazine"
+    - "crypto"
+    - "DLNews"
+    - "Blockworks_"
+    - "thedefiant"
+    - "BanklessHQ"
+    - "MessariCrypto"
+    - "Foresight_News"
+    - "PANewsCN"
+    # ===== 链上分析 (10个) =====
+    - "naborsa"
+    - "arkaborsa"
+    - "daborsa"
+    - "DefiLlama"
+    - "TokenTerminal"
+    - "L2BEAT"
+    - "Deaborsa"
+    - "ultrasoundmoney"
+    - "Glassnode"
+    - "intotheblock"
+  keywords:
+    - "listing"
+    - "list"
+    - "will list"
+    - "new token"
+    - "deposit open"
+    - "trading open"
+    - "launches"
+    - "airdrop"
+    - "上币"
+    - "新币"
+    - "delisting"
+    - "perpetual"
+    - "futures"
+    - "spot"
+
+# ========== 新闻源 20+ ==========
+news:
+  enabled: true
+  poll_interval: 180  # 3分钟
+  sources:
+    # 英文主流
+    - name: "CoinDesk"
+      url: "https://www.coindesk.com/arc/outboundfeeds/rss/"
+    - name: "CoinTelegraph"
+      url: "https://cointelegraph.com/rss"
+    - name: "TheBlock"
+      url: "https://www.theblock.co/rss.xml"
+    - name: "Decrypt"
+      url: "https://decrypt.co/feed"
+    - name: "DLNews"
+      url: "https://www.dlnews.com/rss/"
+    - name: "Blockworks"
+      url: "https://blockworks.co/feed"
+    - name: "BitcoinMagazine"
+      url: "https://bitcoinmagazine.com/feed"
+    - name: "CryptoSlate"
+      url: "https://cryptoslate.com/feed/"
+    - name: "NewsBTC"
+      url: "https://www.newsbtc.com/feed/"
+    - name: "CryptoPotato"
+      url: "https://cryptopotato.com/feed/"
+    # 中文媒体
+    - name: "PANews"
+      url: "https://www.panewslab.com/rss/zh/index.xml"
+    - name: "Odaily"
+      url: "https://www.odaily.news/rss"
+    - name: "BlockBeats"
+      url: "https://www.theblockbeats.info/rss"
+    - name: "ChainCatcher"
+      url: "https://www.chaincatcher.com/rss"
+    - name: "Foresight"
+      url: "https://foresightnews.pro/rss"
+    # 交易所博客
+    - name: "Binance Blog"
+      url: "https://www.binance.com/en/blog/rss"
+    - name: "Coinbase Blog"
+      url: "https://www.coinbase.com/blog/rss"
+    # 研究
+    - name: "Messari"
+      url: "https://messari.io/rss"
+    - name: "a16z Crypto"
+      url: "https://a16zcrypto.com/feed/"
+    - name: "Paradigm"
+      url: "https://www.paradigm.xyz/feed.xml"
+  keywords:
+    - "listing"
+    - "lists"
+    - "launches"
+    - "airdrop"
+    - "partnership"
+    - "Binance"
+    - "Coinbase"
+    - "ETF"
+    - "SEC"
+    - "hack"
+    - "exploit"
+    - "funding"
+    - "raised"
+    - "acquisition"
+    - "delisting"
