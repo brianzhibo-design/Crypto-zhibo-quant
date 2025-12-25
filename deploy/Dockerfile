@@ -25,9 +25,9 @@ COPY config/ ./config/
 RUN mkdir -p /app/logs /app/session
 
 # 设置环境变量
-ENV PYTHONPATH=/app/src
+ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
 # 默认命令
-CMD ["python", "-m", "unified_runner"]
+CMD ["python", "-m", "src.unified_runner"]
 

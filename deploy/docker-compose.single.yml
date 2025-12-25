@@ -79,7 +79,7 @@ services:
       - REDIS_PORT=6379
     ports:
       - "5000:5000"
-    command: python -m src.dashboards.v9.5-trading.server
+    command: python src/dashboards/unified/app.py
     deploy:
       resources:
         limits:

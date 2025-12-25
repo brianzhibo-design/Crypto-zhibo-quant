@@ -1,0 +1,24 @@
+[Unit]
+Description=Crypto Monitor - Listing Tracker
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/v8.3_crypto_monitor
+Environment=PYTHONPATH=/root/v8.3_crypto_monitor/src
+EnvironmentFile=/root/v8.3_crypto_monitor/.env
+
+ExecStart=/root/v8.3_crypto_monitor/venv/bin/python -m src.unified_runner
+
+Restart=always
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=crypto-monitor
+
+[Install]
+WantedBy=multi-user.target
+

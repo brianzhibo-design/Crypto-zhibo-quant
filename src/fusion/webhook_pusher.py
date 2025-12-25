@@ -21,7 +21,10 @@ from core.logging import get_logger
 from core.redis_client import RedisClient
 
 # 配置
-CONFIG_FILE = Path(__file__).parent / 'config.yaml'
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 logger = get_logger('webhook_pusher')
 
 # 全局变量
@@ -37,11 +40,25 @@ stats = {
 
 
 def load_config():
-    """加载配置"""
+    """从环境变量加载配置"""
     global config
-    with open(CONFIG_FILE, 'r') as f:
-        config = yaml.safe_load(f)
-    logger.info("配置加载成功")
+    webhook_url = os.getenv('WECHAT_WEBHOOK') or os.getenv('WECHAT_WEBHOOK_SIGNAL') or os.getenv('WEBHOOK_URL', '')
+    
+    config = {
+        'webhook': {
+            'url': webhook_url,
+            'timeout': 10,
+            'retry_times': 3,
+        },
+        'stream': {
+            'fused_events': 'events:fused',
+        }
+    }
+    
+    if webhook_url:
+        logger.info(f"Webhook 配置加载成功: {webhook_url[:50]}...")
+    else:
+        logger.warning("未配置 WEBHOOK_URL 环境变量")
 
 
 def format_for_n8n(fused_event):

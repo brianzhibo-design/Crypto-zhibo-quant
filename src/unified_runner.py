@@ -231,21 +231,43 @@ class UnifiedRunner:
                 logger.error(f"内存监控错误: {e}")
     
     async def heartbeat(self):
-        """统一心跳 - 报告 unified_runner 自身状态"""
+        """统一心跳 - 为所有启用的模块发送心跳"""
+        # 模块名称映射
+        module_map = {
+            'collector_a': 'NODE_A',
+            'collector_b': 'NODE_B', 
+            'collector_c': 'NODE_C',
+            'telegram_monitor': 'NODE_C_TELEGRAM',
+            'fusion_engine': 'FUSION',
+            'webhook_pusher': 'WEBHOOK',
+        }
+        
+        # 首次等待 5 秒让模块启动
+        await asyncio.sleep(5)
+        
         while self.running:
             try:
-                await asyncio.sleep(60)  # 每60秒
-                
                 uptime = (datetime.now(timezone.utc) - self.stats['start_time']).total_seconds()
+                online = 0
                 
-                # 各模块有自己的心跳，这里只记录总体状态
-                logger.info(
-                    f"💓 系统运行中 | 模块: {self.stats['modules_running']} | "
-                    f"运行时间: {int(uptime/60)}分钟 | 错误: {self.stats['errors']}"
-                )
+                for mod, hid in module_map.items():
+                    if ENABLED_MODULES.get(mod):
+                        try:
+                            self.redis.heartbeat(hid, {
+                                'node': hid,
+                                'status': 'running',
+                                'uptime': str(int(uptime)),
+                            }, ttl=120)
+                            online += 1
+                        except Exception as e:
+                            logger.warning(f"Heartbeat {hid} failed: {e}")
+                
+                logger.info(f"[HB] {online}/{len(module_map)} online | {int(uptime)}s uptime")
+                await asyncio.sleep(30)
                 
             except Exception as e:
-                logger.error(f"心跳错误: {e}")
+                logger.error(f"Heartbeat error: {e}")
+                await asyncio.sleep(30)
     
     async def run(self):
         """主运行循环"""
