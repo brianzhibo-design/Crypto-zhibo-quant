@@ -1,0 +1,245 @@
+# Telegram 频道配置
+# ===================
+# 分类：exchange_official, news, alpha, whale, project, korean
+
+channels:
+  # ==================== 交易所官方 ====================
+  exchange_official:
+    - username: binance_announcements
+      name: Binance Announcements
+      priority: 1
+      
+    - username: Bybit_Announcements
+      name: Bybit Announcements
+      priority: 1
+      
+    - username: okx_announcements
+      name: OKX Announcements
+      priority: 1
+      
+    - username: KuCoin_News
+      name: KuCoin News
+      priority: 1
+      
+    - username: gaborateio_ann
+      name: Gate.io Announcements
+      priority: 2
+      
+    - username: bitaborget_announcements
+      name: Bitget Announcements
+      priority: 2
+      
+    - username: mexcglobal
+      name: MEXC Global
+      priority: 3
+      
+    - username: HTX_announcements
+      name: HTX Announcements
+      priority: 2
+
+  # ==================== 加密新闻 (方程式/快讯) ====================
+  news:
+    # 中文快讯
+    - username: BWEnews
+      name: 方程式新闻 BWEnews
+      priority: 1
+      description: 速度最快的华语加密媒体
+      url: https://t.me/BWEnews
+      
+    - username: coinlive_zh
+      name: Coinlive 中文快讯
+      priority: 1
+      
+    - username: paboranewscn
+      name: PANews 中文
+      priority: 1
+      
+    - username: odaily_news
+      name: Odaily 星球日报
+      priority: 1
+      
+    - username: BlockBeatsAsia
+      name: BlockBeats 律动
+      priority: 1
+      
+    - username: chaincatcher_news
+      name: ChainCatcher 链捕手
+      priority: 2
+      
+    - username: fabororesightnews
+      name: Foresight News
+      priority: 1
+      
+    - username: wuaborblockchain
+      name: 吴说区块链
+      priority: 1
+      
+    - username: theblockbeats
+      name: The BlockBeats
+      priority: 1
+      
+    # 英文快讯
+    - username: coindesk
+      name: CoinDesk
+      priority: 1
+      
+    - username: cointelegraph
+      name: Cointelegraph
+      priority: 1
+      
+    - username: theblock_news
+      name: The Block
+      priority: 1
+      
+    - username: decryptmedia
+      name: Decrypt
+      priority: 2
+      
+    - username: cryptonews_official
+      name: Crypto News
+      priority: 2
+
+  # ==================== Alpha / 研究 ====================
+  alpha:
+    - username: hsakatrades
+      name: hsaka 交易
+      priority: 1
+      
+    - username: Croissant_eth
+      name: Croissant Alpha
+      priority: 2
+      
+    - username: CryptoVizArt
+      name: CryptoVizArt
+      priority: 2
+      
+    - username: thedefiaborant
+      name: The DeFiant
+      priority: 2
+      
+    - username: cobie
+      name: Cobie
+      priority: 1
+      
+    - username: lookonchain
+      name: Lookonchain
+      priority: 1
+
+  # ==================== 鲸鱼/链上监控 ====================
+  whale:
+    - username: whale_alert_io
+      name: Whale Alert
+      priority: 1
+      
+    - username: lookonchain
+      name: Lookonchain
+      priority: 1
+      
+    - username: spotonchain
+      name: Spot On Chain
+      priority: 1
+      
+    - username: arkham
+      name: Arkham Intelligence
+      priority: 1
+      
+    - username: nansen_ai
+      name: Nansen
+      priority: 2
+
+  # ==================== 韩国频道 ====================
+  korean:
+    - username: upbit_official
+      name: Upbit 官方
+      priority: 1
+      
+    - username: bithumb_global
+      name: Bithumb Global
+      priority: 1
+      
+    - username: coinone_official
+      name: Coinone 官方
+      priority: 2
+      
+    - username: korbit_official
+      name: Korbit 官方
+      priority: 2
+
+  # ==================== 项目官方 ====================
+  project:
+    - username: SolanaNews
+      name: Solana News
+      priority: 1
+      
+    - username: ethereum
+      name: Ethereum
+      priority: 1
+      
+    - username: base
+      name: Base
+      priority: 1
+      
+    - username: arbitrum
+      name: Arbitrum
+      priority: 1
+      
+    - username: optimismFND
+      name: Optimism
+      priority: 2
+
+# 关键词配置
+keywords:
+  # 上币关键词 (英文)
+  listing_en:
+    - will list
+    - new listing
+    - adds trading
+    - launches
+    - trading starts
+    - opens trading
+    - new token
+    - pre-market
+    - perpetual listing
+    
+  # 上币关键词 (中文)
+  listing_zh:
+    - 上市
+    - 上线
+    - 新币
+    - 首发
+    - 开放交易
+    - 现货上线
+    - 合约上线
+    
+  # 上币关键词 (韩文)
+  listing_kr:
+    - 신규 상장
+    - 원화 마켓
+    - KRW 마켓
+    - 거래 지원
+    - 디지털 자산
+    
+  # Alpha/研究关键词
+  alpha:
+    - alpha
+    - gem
+    - 100x
+    - moon
+    - pump
+    - early
+    - presale
+    
+  # 鲸鱼警报关键词
+  whale:
+    - whale
+    - large transfer
+    - million
+    - billion
+    - 大额转账
+    - 巨鲸
+
+# 优先级说明
+# 1 = 最高优先级 (即时处理)
+# 2 = 高优先级 (快速处理)
+# 3 = 普通优先级 (标准处理)
+
