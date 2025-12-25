@@ -1,0 +1,28 @@
+# 代码修改规则
+
+## 修改前必做
+1. 备份原文件: cp file.py file.py.bak.$(date +%Y%m%d_%H%M%S)
+2. 语法检查: python3 -m py_compile file.py
+3. 测试运行: python3 file.py（如果可独立运行）
+
+## 修改服务后必做
+1. 重启服务: systemctl restart service_name
+2. 查看状态: systemctl status service_name
+3. 查看日志: journalctl -u service_name -n 50
+
+## Redis 字段规范
+- 新增字段时，必须同时处理：
+  1. 发送端（添加字段）
+  2. 接收端（读取字段）
+  3. 默认值（兼容旧数据）
+
+## 企业微信消息格式
+- 使用 \n 换行
+- 使用 emoji 增强可读性
+- 关键信息加粗或标记
+- 包含时间戳
+
+## 环境变量
+- 敏感信息放 config.secret/.env.dex
+- 不要硬编码密钥
+- URL 编码特殊字符（如Redis密码）

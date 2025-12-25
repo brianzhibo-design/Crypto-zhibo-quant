@@ -1,0 +1,17 @@
+[Unit]
+Description=Crypto Monitor Dashboard
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/crypto-monitor-dashboard
+Environment="REDIS_HOST=127.0.0.1"
+Environment="REDIS_PORT=6379"
+Environment="REDIS_PASSWORD=OiONEfYjv9qKxLrsrLe8b0Q+5Ik2fjibxmH6zAuZqhE="
+ExecStart=/usr/local/bin/gunicorn -w 2 -b 0.0.0.0:5000 app:app
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

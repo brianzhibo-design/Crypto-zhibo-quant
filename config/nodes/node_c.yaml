@@ -1,0 +1,80 @@
+# Node C Configuration - Korea Exchange + Telegram Monitor
+# 韩国交易所 + Telegram 频道监控
+
+# 韩国交易所配置
+exchanges:
+  upbit:
+    enabled: true
+    markets_url: "https://api.upbit.com/v1/market/all"
+    announcement_url: "https://api-manager.upbit.com/api/v1/notices"
+    poll_interval: 10
+    timeout: 15
+    keywords:
+      - "신규"
+      - "상장"
+      - "거래"
+      - "원화"
+      - "마켓"
+      - "추가"
+      - "listing"
+      - "new"
+      
+  bithumb:
+    enabled: true
+    markets_url: "https://api.bithumb.com/public/ticker/ALL_KRW"
+    poll_interval: 10
+    timeout: 15
+    
+  coinone:
+    enabled: true
+    markets_url: "https://api.coinone.co.kr/public/v2/markets/KRW"
+    poll_interval: 10
+    timeout: 15
+    
+  korbit:
+    enabled: true
+    markets_url: "https://api.korbit.co.kr/v1/ticker/detailed/all"
+    poll_interval: 10
+    timeout: 15
+    
+  gopax:
+    enabled: false
+    markets_url: "https://api.gopax.co.kr/trading-pairs"
+    poll_interval: 10
+    timeout: 15
+
+# Telegram 配置
+telegram:
+  enabled: true
+  
+  # 关键词匹配
+  keywords:
+    - "listing"
+    - "will list"
+    - "new trading"
+    - "adding"
+    - "launching"
+    - "上市"
+    - "上线"
+    - "开放交易"
+    - "新币"
+    - "首发"
+    - "pre-market"
+    - "perpetual"
+    - "永续"
+    - "合约"
+    - "spot"
+    - "现货"
+    
+  # 高优先级关键词
+  high_priority_keywords:
+    - "binance listing"
+    - "okx listing"
+    - "bybit listing"
+    - "coinbase listing"
+    - "upbit listing"
+
+# Telethon 配置（需要从环境变量读取）
+telethon:
+  session_name: "telegram_monitor"
+

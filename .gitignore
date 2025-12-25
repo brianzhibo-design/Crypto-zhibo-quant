@@ -1,0 +1,34 @@
+# 敏感配置目录
+config.secret/
+.env
+
+# 备份文件
+backups/
+*.tar.gz
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+venv/
+.venv/
+
+# Logs & Data
+*.log
+*.rdb
+data/logs/
+data/redis_snapshots/
+
+# Telegram
+*.session
+*.session-journal
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Temp
+.temp_extract/

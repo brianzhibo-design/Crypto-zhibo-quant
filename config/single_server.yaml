@@ -1,0 +1,135 @@
+# 单机部署配置 - 4核8G 新加坡服务器优化
+# Single Server Deployment - Optimized for 4vCPU 8GB RAM
+
+# ============================================================
+# 全局资源限制
+# ============================================================
+resources:
+  # CPU 配置
+  max_workers: 4              # asyncio 默认工作线程
+  
+  # 内存配置 (MB)
+  max_memory: 6144            # 最大内存使用 (6GB，留 2GB 给系统)
+  gc_interval: 300            # 垃圾回收间隔（秒）
+  
+  # 网络配置
+  max_concurrent_http: 20     # 最大并发 HTTP 请求
+  http_timeout: 15            # HTTP 超时（秒）
+  connection_pool_size: 100   # HTTP 连接池大小
+
+# ============================================================
+# Redis 配置 (内存优化)
+# ============================================================
+redis:
+  host: "127.0.0.1"
+  port: 6379
+  password: "${REDIS_PASSWORD}"
+  db: 0
+  
+  # 连接池
+  pool_size: 10               # 连接池大小
+  socket_timeout: 5           # Socket 超时
+  
+  # Stream 配置
+  stream:
+    raw_events: "events:raw"
+    fused_events: "events:fused"
+    max_len: 10000            # 限制 Stream 长度，防止内存溢出
+
+# ============================================================
+# 模块启用配置
+# ============================================================
+modules:
+  # 采集器
+  collector_a:
+    enabled: true
+    description: "交易所监控 (10所)"
+    
+  collector_b:
+    enabled: true
+    description: "区块链+新闻监控"
+    
+  collector_c:
+    enabled: true
+    description: "韩国交易所监控"
+    
+  telegram_monitor:
+    enabled: true
+    description: "Telegram 实时监控"
+    
+  # 处理引擎
+  fusion_engine:
+    enabled: true
+    description: "融合评分引擎"
+    
+  signal_router:
+    enabled: false
+    description: "信号路由 (按需启用)"
+    
+  webhook_pusher:
+    enabled: true
+    description: "企业微信推送"
+    
+  # Dashboard
+  dashboard:
+    enabled: false            # 按需手动启动
+    port: 5000
+
+# ============================================================
+# 轮询间隔优化 (减少资源消耗)
+# ============================================================
+poll_intervals:
+  # 交易所监控
+  exchange_rest: 15           # REST API 轮询（秒）
+  exchange_announcement: 30   # 公告检查
+  
+  # 区块链
+  ethereum_rpc: 15
+  bsc_rpc: 5
+  solana_rpc: 3
+  
+  # 社交媒体
+  twitter: 120                # Twitter（如启用）
+  
+  # 新闻
+  news_rss: 600               # 新闻 RSS
+  
+  # 韩国交易所
+  korea_exchange: 15
+  korea_announcement: 30
+  
+  # 心跳
+  heartbeat: 60
+
+# ============================================================
+# 日志配置 (减少 IO)
+# ============================================================
+logging:
+  level: "INFO"               # 生产环境用 INFO
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+  
+  # 日志轮转
+  max_size_mb: 100
+  backup_count: 5
+  
+  # 减少详细日志
+  suppress_modules:
+    - "aiohttp"
+    - "websockets"
+    - "telethon"
+
+# ============================================================
+# 性能监控
+# ============================================================
+monitoring:
+  enabled: true
+  metrics_interval: 60        # 指标收集间隔
+  
+  # 告警阈值
+  alerts:
+    memory_warning_mb: 5120   # 5GB
+    memory_critical_mb: 6656  # 6.5GB
+    cpu_warning_percent: 80
+    error_rate_threshold: 10  # 每分钟错误数
+
+

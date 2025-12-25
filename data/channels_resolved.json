@@ -1,0 +1,362 @@
+{
+  "resolved": [
+    {
+      "id": 1279597711,
+      "access_hash": -854253841362836639,
+      "username": "",
+      "title": "方程式新闻 BWEnews",
+      "category": "important"
+    },
+    {
+      "id": 1151336194,
+      "access_hash": 1938571809926488948,
+      "username": "BybitRussian",
+      "title": "BYBIT Комьюнити",
+      "category": "important"
+    },
+    {
+      "id": 2254258187,
+      "access_hash": 6325315526050016946,
+      "username": "OKXWalletEN_Official",
+      "title": "OKX Web3 English",
+      "category": "important"
+    },
+    {
+      "id": 1526765830,
+      "access_hash": 4146440310393181029,
+      "username": "foresightnews",
+      "title": "Foresight News",
+      "category": "important"
+    },
+    {
+      "id": 1590958755,
+      "access_hash": 6164745258449629381,
+      "username": "BingXOfficial",
+      "title": "BingX - Empowering Traders",
+      "category": "important"
+    },
+    {
+      "id": 2963613944,
+      "access_hash": 5321719350432180087,
+      "username": "BWE_pricechange_monitor",
+      "title": "方程式-价格异动监测",
+      "category": "important"
+    },
+    {
+      "id": 1196969278,
+      "access_hash": -5995858871622403580,
+      "username": "BitMartExchange",
+      "title": "BitMart Exchange",
+      "category": "important"
+    },
+    {
+      "id": 1816192742,
+      "access_hash": 3827138600478373889,
+      "username": "BloFin_Official",
+      "title": "BloFin Exchange",
+      "category": "important"
+    },
+    {
+      "id": 2580613515,
+      "access_hash": -2846757762963429651,
+      "username": "BWE_tier3_monitor",
+      "title": "方程式-三线交易所公告监控 Tier3 Exchanges (Gate,Mexc)",
+      "category": "important"
+    },
+    {
+      "id": 3164084756,
+      "access_hash": -2113793183181101578,
+      "username": "bwe_earn",
+      "title": "方程式-交易所理财提醒💰⏰Exchanges Earn Monitor",
+      "category": "important"
+    },
+    {
+      "id": 1548097546,
+      "access_hash": 601373758500899348,
+      "username": "MEXCRU_News",
+      "title": "МЕХС НОВОСТИ",
+      "category": "important"
+    },
+    {
+      "id": 1624922858,
+      "access_hash": -9141376346822897264,
+      "username": "",
+      "title": "KuCoin Crypto | Trading & Investment",
+      "category": "important"
+    },
+    {
+      "id": 3096206759,
+      "access_hash": -5046974748294883398,
+      "username": "BWE_OI_Price_monitor",
+      "title": "方程式-OI&Price异动（抓庄神器）",
+      "category": "important"
+    },
+    {
+      "id": 2974857878,
+      "access_hash": 3240648869883244663,
+      "username": "BWE_korean_monitor",
+      "title": "方程式-韩所监控 Korean Exchanges Monitor",
+      "category": "important"
+    },
+    {
+      "id": 1260161873,
+      "access_hash": 495061024436765101,
+      "username": "BinanceLiquidations",
+      "title": "Binance Futures Liquidations",
+      "category": "important"
+    },
+    {
+      "id": 1280808139,
+      "access_hash": 2692579762622135375,
+      "username": "",
+      "title": "MEXC Exchange & Crypto News",
+      "category": "important"
+    },
+    {
+      "id": 2977082618,
+      "access_hash": -9081735358149380000,
+      "username": "BWE_Binance_monitor",
+      "title": "方程式-币安公告监控 Binance Announcement Monitor",
+      "category": "important"
+    },
+    {
+      "id": 1309580926,
+      "access_hash": 1321607001450282913,
+      "username": "PANewsLab",
+      "title": "PANews 加密货币冲锋队",
+      "category": "important"
+    },
+    {
+      "id": 1314842429,
+      "access_hash": 2330039103023648900,
+      "username": "blockbeats",
+      "title": "区块律动BlockBeats",
+      "category": "important"
+    },
+    {
+      "id": 3006297937,
+      "access_hash": -4498484445762400206,
+      "username": "BWE_tier2_monitor",
+      "title": "方程式-二线交易所监控 Tier2 Exchanges(OKX,Bybit,Bitget)",
+      "category": "important"
+    },
+    {
+      "id": 2538595599,
+      "access_hash": -5885787990101897627,
+      "username": "phemexofficial",
+      "title": ".",
+      "category": "important"
+    },
+    {
+      "id": 1175411406,
+      "access_hash": -2516778132221086619,
+      "username": "BackpackExchange",
+      "title": "BackpackExchange",
+      "category": "important"
+    },
+    {
+      "id": 1696896259,
+      "access_hash": 2831589307354605972,
+      "username": "blofin",
+      "title": "Blofin Community",
+      "category": "important"
+    },
+    {
+      "id": 1146915409,
+      "access_hash": -1920365834609648247,
+      "username": "binance_announcements",
+      "title": "Binance Announcements",
+      "category": "important"
+    },
+    {
+      "id": 2364176580,
+      "access_hash": -4213873425189815633,
+      "username": "BWEtradfi",
+      "title": "@BWETradFi |方程式财经（传统金融新闻）",
+      "category": "important"
+    },
+    {
+      "id": 1260376173,
+      "access_hash": 2605910793695740967,
+      "username": "Bitget_Announcements",
+      "title": "Bitget Announcements",
+      "category": "important"
+    },
+    {
+      "id": 1432340071,
+      "access_hash": -4733213653347987281,
+      "username": "TheCryptoGateway",
+      "title": "The Crypto Gateway",
+      "category": "important"
+    },
+    {
+      "id": 1449478440,
+      "access_hash": 1566420448728970476,
+      "username": "Bybit_Announcements",
+      "title": "Bybit Announcements",
+      "category": "important"
+    },
+    {
+      "id": 1282657206,
+      "access_hash": -1878525709863014167,
+      "username": "WhiteBIT",
+      "title": "WhiteBIT News",
+      "category": "important"
+    },
+    {
+      "id": 2758649849,
+      "access_hash": -7764502920232900446,
+      "username": "BWE_reserved1",
+      "title": "方程式-币安Alpha&Aster上新&Moonshot",
+      "category": "important"
+    },
+    {
+      "id": 1311016719,
+      "access_hash": 8493685810939738166,
+      "username": "Binance_UA_official",
+      "title": "Binance Новини",
+      "category": "important"
+    },
+    {
+      "id": 1598032163,
+      "access_hash": 7200391688781263914,
+      "username": "bybitukrainiannews",
+      "title": "Bybit Новини",
+      "category": "important"
+    },
+    {
+      "id": 1862339704,
+      "access_hash": -772694611536830992,
+      "username": "Bitget_Wallet_Announcement",
+      "title": "Bitget Wallet Announcements",
+      "category": "important"
+    },
+    {
+      "id": 1350175669,
+      "access_hash": 6245486895690003197,
+      "username": "binance_ru",
+      "title": "Binance Новости",
+      "category": "important"
+    },
+    {
+      "id": 2052827234,
+      "access_hash": 2145259826603714823,
+      "username": "okxwalletannouncement",
+      "title": "OKX Web3 Announcement",
+      "category": "important"
+    },
+    {
+      "id": 1199213090,
+      "access_hash": 7864245141192306109,
+      "username": "OKXAnnouncements",
+      "title": "OKX Announcements",
+      "category": "important"
+    },
+    {
+      "id": 2508537120,
+      "access_hash": -1141297651914952630,
+      "username": "bwe_reserved4",
+      "title": "方程式-CZ&Heyi监控频道(一切推文+改名/头像)",
+      "category": "important"
+    },
+    {
+      "id": 1184826830,
+      "access_hash": 6962433043941873175,
+      "username": "Bybit_API_Announcements",
+      "title": "Bybit API Announcements",
+      "category": "important"
+    },
+    {
+      "id": 2927710852,
+      "access_hash": -230987777261631952,
+      "username": "bwe_reserved8",
+      "title": "方程式-暂未开放8",
+      "category": "important"
+    },
+    {
+      "id": 3168427228,
+      "access_hash": 4318840182060578269,
+      "username": "bwe_Reserved7",
+      "title": "方程式-暂未开放7",
+      "category": "important"
+    },
+    {
+      "id": 3005315417,
+      "access_hash": 4199713138343416173,
+      "username": "BWE_Reserved6",
+      "title": "方程式-暂未开放6",
+      "category": "important"
+    },
+    {
+      "id": 2996531644,
+      "access_hash": 5396282263448951147,
+      "username": "BWE_reserved3",
+      "title": "方程式-暂未开放3（多维度新闻聚合）",
+      "category": "important"
+    },
+    {
+      "id": 3042184220,
+      "access_hash": 2959829901020198346,
+      "username": "BWE_media_monitor",
+      "title": "方程式AI精选聚合器",
+      "category": "important"
+    },
+    {
+      "id": 2201757865,
+      "access_hash": 5717664023569357503,
+      "username": "okx_racer_official_announcement",
+      "title": "OKX Racer Announcement",
+      "category": "important"
+    },
+    {
+      "id": 2215700757,
+      "access_hash": 1302902524337870877,
+      "username": "Binance_Moonbix_Announcements",
+      "title": "Binance Moonbix Announcements",
+      "category": "important"
+    },
+    {
+      "id": 2355492891,
+      "access_hash": -1823476382369806908,
+      "username": "bybit_spaces_announcements",
+      "title": "Bybit SpaceS Announcements",
+      "category": "important"
+    },
+    {
+      "id": 2092796142,
+      "access_hash": 8502214088674364367,
+      "username": "OdailyChina",
+      "title": "https://t.me/OdailyChina",
+      "category": "important"
+    },
+    {
+      "id": 2463500450,
+      "access_hash": 8589177434602009301,
+      "username": "BingX_Global",
+      "title": "Bing x",
+      "category": "important"
+    },
+    {
+      "id": 1871499273,
+      "access_hash": -7136040946298196308,
+      "username": "WhiteBIT_official",
+      "title": "Fjgkt",
+      "category": "important"
+    },
+    {
+      "id": 1847322956,
+      "access_hash": -484370742081757303,
+      "username": "Phemex",
+      "title": "Phemex.com",
+      "category": "important"
+    },
+    {
+      "id": 1864470179,
+      "access_hash": -2608578417180840351,
+      "username": "Wu_Blockchain",
+      "title": "1",
+      "category": "important"
+    }
+  ],
+  "failed": []
+}

@@ -1,0 +1,80 @@
+# Node B Configuration - Blockchain + Twitter + News Monitor
+# 区块链 + 社交媒体 + 新闻监控
+
+# Redis 配置（从环境变量覆盖）
+redis:
+  host: "127.0.0.1"
+  port: 6379
+  password: ""
+
+# 区块链监控配置
+blockchain:
+  ethereum:
+    enabled: true
+    rpc_url: "https://eth.llamarpc.com"
+    poll_interval: 12
+    
+  bnb:
+    enabled: true
+    rpc_url: "https://bsc-dataseed.binance.org"
+    poll_interval: 3
+    
+  solana:
+    enabled: true
+    rpc_url: "https://api.mainnet-beta.solana.com"
+    poll_interval: 1
+
+# Twitter 监控配置
+twitter:
+  enabled: false  # 需要配置 API 密钥
+  poll_interval: 60
+  
+  # 监控的账号
+  accounts:
+    - "@binance"
+    - "@okx"
+    - "@bybit_official"
+    - "@gate_io"
+    - "@kaborinance"
+    - "@lookonchain"
+    - "@spotonchain"
+    - "@whale_alert"
+    - "@EmberCN"
+    - "@WuBlockchain"
+    
+  # 关键词
+  keywords:
+    - "listing"
+    - "will list"
+    - "new trading pair"
+    - "上市"
+    - "上线"
+    - "开放交易"
+
+# 新闻 RSS 监控
+news:
+  enabled: true
+  poll_interval: 300
+  
+  sources:
+    - name: "CoinDesk"
+      url: "https://www.coindesk.com/arc/outboundfeeds/rss/"
+      
+    - name: "CoinTelegraph"
+      url: "https://cointelegraph.com/rss"
+      
+    - name: "The Block"
+      url: "https://www.theblock.co/rss.xml"
+      
+    - name: "Decrypt"
+      url: "https://decrypt.co/feed"
+      
+  keywords:
+    - "listing"
+    - "list"
+    - "binance"
+    - "coinbase"
+    - "new token"
+    - "上市"
+    - "上线"
+

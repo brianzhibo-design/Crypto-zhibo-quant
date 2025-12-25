@@ -1,0 +1,33 @@
+# Fusion 模块统一配置
+
+# Redis 配置（从环境变量读取，此处为备用）
+redis:
+  host: 127.0.0.1
+  port: 6379
+  password: ""
+  db: 0
+
+# Stream 配置
+stream:
+  raw_events: events:raw
+  fused_events: events:fused
+  routed:
+    cex: events:route:cex
+    hl: events:route:hl
+    dex: events:route:dex
+
+# Webhook 配置
+webhook:
+  url: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=1ceb8074-c3b7-4ea8-9267-e5b8d2c89355
+  timeout: 10
+  retry_times: 3
+
+# Router 配置
+router:
+  consumer_group: router_group
+  consumer_name: router_1
+
+# Fusion 配置
+fusion:
+  consumer_group: fusion_group
+  consumer_name: fusion_consumer
