@@ -130,7 +130,7 @@ def load_config():
     config = {}
     
     if HAS_YAML and CONFIG_FILE.exists():
-    with open(CONFIG_FILE, 'r') as f:
+        with open(CONFIG_FILE, 'r') as f:
             config = yaml.safe_load(f) or {}
     
     # 从环境变量覆盖 Redis 配置

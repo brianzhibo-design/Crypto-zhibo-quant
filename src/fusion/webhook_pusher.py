@@ -5,7 +5,7 @@ Webhook Pusher - Push fused events to n8n
 保持与现有n8n格式兼容
 """
 
-from wechat_pusher import send_wechat
+from .wechat_pusher import send_wechat
 import asyncio
 import aiohttp
 import json
