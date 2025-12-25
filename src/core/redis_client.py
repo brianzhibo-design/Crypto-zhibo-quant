@@ -42,6 +42,9 @@ _redis_instances: Dict[str, 'RedisClient'] = {}
 class RedisClient:
     """统一的 Redis 客户端封装"""
     
+    # 使用 __slots__ 防止意外属性访问
+    __slots__ = ('_host', '_port', '_password', '_db', '_client')
+    
     def __init__(
         self,
         host: Optional[str] = None,
@@ -62,32 +65,61 @@ class RedisClient:
             socket_timeout: 套接字超时
             socket_connect_timeout: 连接超时
         """
-        # 从环境变量读取默认值
-        self.host = host or os.environ.get('REDIS_HOST', '127.0.0.1')
-        self.port = port or int(os.environ.get('REDIS_PORT', '6379'))
-        self.password = password or os.environ.get('REDIS_PASSWORD')
-        self.db = db
+        # 从环境变量读取默认值 - 使用 object.__setattr__ 避免任何潜在递归
+        object.__setattr__(self, '_host', host or os.environ.get('REDIS_HOST', '127.0.0.1'))
+        object.__setattr__(self, '_port', port or int(os.environ.get('REDIS_PORT', '6379')))
+        object.__setattr__(self, '_password', password or os.environ.get('REDIS_PASSWORD'))
+        object.__setattr__(self, '_db', db)
         
-        # 创建连接
-        self.client = redis.Redis(
-            host=self.host,
-            port=self.port,
-            password=self.password,
-            db=self.db,
+        # 创建连接 - 直接使用 object.__setattr__
+        _client = redis.Redis(
+            host=self._host,
+            port=self._port,
+            password=self._password,
+            db=self._db,
             decode_responses=True,
             socket_timeout=socket_timeout,
             socket_connect_timeout=socket_connect_timeout,
             retry_on_timeout=True,
             health_check_interval=30,
         )
+        object.__setattr__(self, '_client', _client)
         
         # 测试连接
         try:
-            self.client.ping()
-            logger.info(f"✅ Redis 连接成功: {self.host}:{self.port}")
+            self._client.ping()
+            logger.info(f"✅ Redis 连接成功: {self._host}:{self._port}")
         except Exception as e:
             logger.error(f"❌ Redis 连接失败: {e}")
             raise
+    
+    # 属性访问器 - 避免递归
+    @property
+    def host(self) -> str:
+        return object.__getattribute__(self, '_host')
+    
+    @property
+    def port(self) -> int:
+        return object.__getattribute__(self, '_port')
+    
+    @property
+    def password(self) -> Optional[str]:
+        return object.__getattribute__(self, '_password')
+    
+    @property
+    def db(self) -> int:
+        return object.__getattribute__(self, '_db')
+    
+    @property
+    def client(self) -> redis.Redis:
+        """获取底层 Redis 客户端"""
+        return object.__getattribute__(self, '_client')
+    
+    def __getattr__(self, name: str):
+        """代理未定义的属性到底层 Redis 客户端"""
+        # 使用 object.__getattribute__ 避免递归
+        _client = object.__getattribute__(self, '_client')
+        return getattr(_client, name)
     
     # ==================== Stream 操作 ====================
     
@@ -120,7 +152,7 @@ class RedisClient:
                     serialized_data[key] = str(value)
             
             # 添加到 Stream
-            event_id = self.client.xadd(
+            event_id = self._client.xadd(
                 name=stream_key,
                 fields=serialized_data,
                 maxlen=maxlen,
@@ -158,13 +190,13 @@ class RedisClient:
         try:
             # 确保消费组存在
             try:
-                self.client.xgroup_create(stream_key, consumer_group, id='0', mkstream=True)
+                self._client.xgroup_create(stream_key, consumer_group, id='0', mkstream=True)
             except redis.exceptions.ResponseError as e:
                 if "BUSYGROUP" not in str(e):
                     raise
             
             # 读取消息
-            messages = self.client.xreadgroup(
+            messages = self._client.xreadgroup(
                 groupname=consumer_group,
                 consumername=consumer_name,
                 streams={stream_key: '>'},
@@ -198,7 +230,7 @@ class RedisClient:
             消息列表
         """
         try:
-            messages = self.client.xread(
+            messages = self._client.xread(
                 streams={stream_key: last_id},
                 count=count,
                 block=block,
@@ -216,7 +248,7 @@ class RedisClient:
     ) -> bool:
         """创建消费者组"""
         try:
-            self.client.xgroup_create(stream_key, group_name, id=start_id, mkstream=True)
+            self._client.xgroup_create(stream_key, group_name, id=start_id, mkstream=True)
             return True
         except redis.exceptions.ResponseError as e:
             if 'BUSYGROUP' not in str(e):
@@ -231,7 +263,7 @@ class RedisClient:
     ) -> bool:
         """ACK 消息"""
         try:
-            self.client.xack(stream_key, group_name, message_id)
+            self._client.xack(stream_key, group_name, message_id)
             return True
         except Exception as e:
             logger.error(f"ACK 消息失败: {e}")
@@ -273,8 +305,8 @@ class RedisClient:
             serialized['timestamp'] = str(int(time.time()))
             
             # 设置 Hash
-            self.client.hset(key, mapping=serialized)
-            self.client.expire(key, ttl)
+            self._client.hset(key, mapping=serialized)
+            self._client.expire(key, ttl)
             
             return True
             
@@ -286,7 +318,7 @@ class RedisClient:
         """获取节点心跳数据"""
         try:
             key = f"node:heartbeat:{node_id}"
-            data = self.client.hgetall(key)
+            data = self._client.hgetall(key)
             if not data:
                 return None
             
@@ -309,7 +341,7 @@ class RedisClient:
         """检查交易对是否已知"""
         try:
             key = f"known_pairs:{exchange.lower()}"
-            return self.client.sismember(key, pair)
+            return self._client.sismember(key, pair)
         except Exception as e:
             logger.error(f"检查已知交易对失败: {e}")
             return False
@@ -318,7 +350,7 @@ class RedisClient:
         """添加已知交易对"""
         try:
             key = f"known_pairs:{exchange.lower()}"
-            self.client.sadd(key, pair)
+            self._client.sadd(key, pair)
             return True
         except Exception as e:
             logger.error(f"添加已知交易对失败: {e}")
@@ -328,7 +360,7 @@ class RedisClient:
         """获取所有已知交易对"""
         try:
             key = f"known_pairs:{exchange.lower()}"
-            return self.client.smembers(key)
+            return self._client.smembers(key)
         except Exception as e:
             logger.error(f"获取已知交易对失败: {e}")
             return set()
@@ -338,7 +370,7 @@ class RedisClient:
     def get(self, key: str) -> Optional[str]:
         """获取键值"""
         try:
-            return self.client.get(key)
+            return self._client.get(key)
         except Exception as e:
             logger.error(f"Get 失败: {e}")
             return None
@@ -352,7 +384,7 @@ class RedisClient:
     ) -> bool:
         """设置键值"""
         try:
-            return bool(self.client.set(key, value, ex=ex, nx=nx))
+            return bool(self._client.set(key, value, ex=ex, nx=nx))
         except Exception as e:
             logger.error(f"Set 失败: {e}")
             return False
@@ -360,7 +392,7 @@ class RedisClient:
     def delete(self, *keys: str) -> int:
         """删除键"""
         try:
-            return self.client.delete(*keys)
+            return self._client.delete(*keys)
         except Exception as e:
             logger.error(f"Delete 失败: {e}")
             return 0
@@ -368,14 +400,14 @@ class RedisClient:
     def ttl(self, key: str) -> int:
         """获取键的 TTL"""
         try:
-            return self.client.ttl(key)
+            return self._client.ttl(key)
         except:
             return -1
     
     def xlen(self, stream_key: str) -> int:
         """获取 Stream 长度"""
         try:
-            return self.client.xlen(stream_key)
+            return self._client.xlen(stream_key)
         except:
             return 0
     
@@ -383,15 +415,15 @@ class RedisClient:
         """获取 Redis 信息"""
         try:
             if section:
-                return self.client.info(section)
-            return self.client.info()
+                return self._client.info(section)
+            return self._client.info()
         except:
             return {}
     
     def close(self) -> None:
         """关闭连接"""
         try:
-            self.client.close()
+            self._client.close()
             logger.info("✅ Redis 连接已关闭")
         except Exception as e:
             logger.error(f"关闭 Redis 连接失败: {e}")
@@ -450,7 +482,7 @@ def get_redis(
     if cache_key in _redis_instances:
         try:
             # 检查连接是否有效
-            _redis_instances[cache_key].client.ping()
+            _redis_instances[cache_key]._client.ping()
             return _redis_instances[cache_key]
         except:
             # 连接失效，删除缓存
