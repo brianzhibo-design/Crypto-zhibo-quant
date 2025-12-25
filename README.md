@@ -1,121 +1,103 @@
-# Crypto Monitor v8.3
+# Crypto Monitor
 
-分布式加密货币信号监控与自动交易系统
+Real-time cryptocurrency listing monitor and trading signal system.
 
-## 📁 项目结构
+## Architecture
+
+Single-server deployment optimized for 4vCPU/8GB RAM.
 
 ```
-crypto-monitor-v8.3/
-├── 📁 backups/                    # 原始备份文件
-├── 📁 docs/                       # 技术文档 (7个核心文档)
-├── 📁 src/                        # 源代码
-│   ├── shared/                    # 共享模块
-│   ├── collectors/                # 数据采集层
-│   │   ├── node_a/               # 交易所监控
-│   │   ├── node_b/               # 链上+社交
-│   │   └── node_c/               # Telegram+韩所
-│   ├── fusion/                    # 数据融合层
-│   └── dashboards/                # 监控Dashboard
-│       ├── v8.3-basic/
-│       ├── v8.6-quantum/
-│       └── v9.5-trading/
-├── 📁 config/                     # 配置模板
-├── 📁 config.secret/              # 敏感配置 (gitignore)
-├── 📁 deployment/                 # 部署相关
-│   ├── systemd/                   # systemd服务
-│   ├── scripts/                   # 运维脚本
-│   └── docker/                    # Docker配置
-├── 📁 data/                       # 数据文件
-├── 📁 tools/                      # 工具脚本
-├── .gitignore
-├── Makefile
-└── README.md
+┌─────────────────────────────────────────────────────────────┐
+│                     unified_runner.py                        │
+├─────────────────────────────────────────────────────────────┤
+│  Collectors          │  Fusion           │  Output           │
+│  ─────────────       │  ───────          │  ───────          │
+│  collector_a (CEX)   │  fusion_engine    │  webhook_pusher   │
+│  collector_b (Chain) │  scoring_engine   │  dashboard        │
+│  collector_c (Korea) │                   │                   │
+│  telegram_monitor    │                   │                   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                        ┌─────┴─────┐
+                        │   Redis   │
+                        │  Streams  │
+                        └───────────┘
 ```
 
-## 🚀 快速开始
-
-### 1. 初始化项目 (可选)
-
-如果从零开始：
-```bash
-chmod +x init_project.sh
-./init_project.sh
-```
-
-### 2. 复制备份文件
-
-将以下文件复制到 `backups/` 目录：
-- `node_a_backup_*.tar.gz`
-- `node_b_backup_*.tar.gz`
-- `node_c_backup_*.tar.gz`
-- `redis_server_backup_*.tar.gz`
-- `dashboard_backup_*.tar.gz`
-- `scripts_backup_*.tar.gz`
-
-### 3. 解压并整理
+## Quick Start
 
 ```bash
-make extract
+# 1. Setup
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Configure
+cp config/.env.example .env
+# Edit .env with your API keys
+
+# 3. Run
+python -m src.unified_runner
 ```
 
-### 4. 验证配置
+## Configuration
+
+All configuration in `config/single_server.yaml` and `.env`:
+
+| Variable | Description |
+|----------|-------------|
+| REDIS_HOST | Redis server address |
+| REDIS_PASSWORD | Redis password |
+| TELEGRAM_API_ID | Telegram API ID |
+| TELEGRAM_API_HASH | Telegram API Hash |
+| WECHAT_WEBHOOK | WeChat webhook URL |
+
+## Modules
+
+| Module | Description | Status |
+|--------|-------------|--------|
+| collector_a | Exchange monitoring (10 CEX) | Active |
+| collector_b | Blockchain + News | Active |
+| collector_c | Korean exchanges | Active |
+| telegram_monitor | Telegram channels | Active |
+| fusion_engine | Signal scoring | Active |
+| webhook_pusher | WeChat notifications | Active |
+| dashboard | Web UI (port 5000) | Manual |
+
+## Dashboard
 
 ```bash
-make check-config
+cd src/dashboards/unified
+python app.py
+# Open http://localhost:5000
 ```
 
-## 📚 文档
+## Deployment
 
-| 文档 | 描述 |
-|------|------|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统架构分析 (模块依赖、数据流) |
-| [docs/system_overview.md](docs/system_overview.md) | 系统总体说明 |
-| [docs/event_schema.md](docs/event_schema.md) | 事件Schema定义 |
-| [docs/node_architecture.md](docs/node_architecture.md) | 节点架构详解 |
-| [docs/fusion_logic.md](docs/fusion_logic.md) | 融合引擎逻辑 |
-| [docs/n8n_flow.md](docs/n8n_flow.md) | n8n决策流说明 |
-
-## 🔧 常用命令
+### Systemd Service
 
 ```bash
-make extract      # 解压备份文件
-make check-config # 检查配置文件
-make stats        # 统计代码
-make clean        # 清理临时文件
-make help         # 查看帮助
+# /etc/systemd/system/crypto-monitor.service
+[Unit]
+Description=Crypto Monitor
+After=redis.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/crypto-monitor
+ExecStart=/root/crypto-monitor/venv/bin/python -m src.unified_runner
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-## 🌐 服务器信息
+```bash
+sudo systemctl enable crypto-monitor
+sudo systemctl start crypto-monitor
+```
 
-| 节点 | IP | 位置 | 角色 |
-|------|-----|------|------|
-| Node A | 45.76.193.208 | 🇯🇵 Tokyo | 交易所监控 |
-| Node B | 45.77.168.238 | 🇸🇬 Singapore | 链上+社交 |
-| Node C | 158.247.222.198 | 🇰🇷 Seoul | Telegram+韩所 |
-| Redis | 139.180.133.81 | 🇸🇬 Singapore | Fusion Center |
+## License
 
-## ⚠️ 安全提醒
-
-`config.secret/` 目录包含敏感凭证：
-- Redis密码
-- Telegram API密钥
-- Twitter API密钥
-- 区块链RPC密钥
-- OpenAI API密钥
-- Hyperliquid私钥
-
-**请勿提交到版本控制！**
-
-## 📊 系统指标
-
-- 监控交易所: 14家
-- 监控区块链: 7条
-- Telegram频道: 108个
-- Twitter账号: 80+
-- RSS源: 20+
-- 韩国交易所: 5家
-
----
-
-**Version**: v8.3.1  
-**Last Backup**: 2025-12-03
+Private - All rights reserved.
