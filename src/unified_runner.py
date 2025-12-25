@@ -161,6 +161,10 @@ class UnifiedRunner:
             from collectors.node_c.telegram_monitor import main as telegram_main
             logger.info("📡 启动 Telegram Monitor (实时监控)")
             await telegram_main()
+        except SystemExit as e:
+            # telegram_monitor 模块可能因缺少配置文件而调用 sys.exit()
+            logger.warning(f"⚠️ Telegram Monitor 退出 (code={e.code})，可能缺少 channels_resolved.json")
+            logger.warning("   其他模块将继续运行")
         except ImportError as e:
             logger.warning(f"Telegram Monitor 导入失败: {e}")
         except Exception as e:

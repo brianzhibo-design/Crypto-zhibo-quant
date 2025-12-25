@@ -57,14 +57,30 @@ api_hash = os.getenv('TELEGRAM_API_HASH', telethon_conf.get('api_hash', ''))
 session_name = telethon_conf.get('session_name', 'telegram_monitor')
 
 # 从预解析文件加载频道
-try:
-    with open('channels_resolved.json') as f:
-        resolved_data = json.load(f)
-        channel_entries = resolved_data['resolved']
-    logger.info(f"✅ 从 channels_resolved.json 加载了 {len(channel_entries)} 个频道配置")
-except FileNotFoundError:
-    logger.error("❌ channels_resolved.json 不存在，请先运行 resolve_channels.py")
-    sys.exit(1)
+channel_entries = []
+CHANNELS_FILE_MISSING = False
+
+# 尝试多个可能的路径
+possible_paths = [
+    'channels_resolved.json',
+    'src/collectors/node_c/channels_resolved.json',
+    os.path.join(os.path.dirname(__file__), 'channels_resolved.json'),
+]
+
+for path in possible_paths:
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                resolved_data = json.load(f)
+                channel_entries = resolved_data.get('resolved', [])
+            logger.info(f"✅ 从 {path} 加载了 {len(channel_entries)} 个频道配置")
+            break
+        except Exception as e:
+            logger.warning(f"加载 {path} 失败: {e}")
+else:
+    logger.warning("⚠️ channels_resolved.json 不存在，Telegram 监控将跳过")
+    logger.warning("   请运行: python src/collectors/node_c/resolve_channels.py")
+    CHANNELS_FILE_MISSING = True
 
 # 频道信息映射
 channel_info = {}
@@ -175,6 +191,12 @@ async def main():
     logger.info("=" * 60)
     logger.info("Telegram 频道监控 - 实时版本")
     logger.info("=" * 60)
+    
+    # 检查是否有频道配置
+    if CHANNELS_FILE_MISSING or not channel_entries:
+        logger.warning("⚠️ 没有频道配置，Telegram 监控将不启动")
+        logger.warning("   请运行: python src/collectors/node_c/resolve_channels.py")
+        return
     
     await client.start()
     logger.info("✅ Telethon 已连接")
