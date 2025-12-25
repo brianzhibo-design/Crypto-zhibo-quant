@@ -369,8 +369,19 @@ class FusionEngineV3:
                         self.stats['filtered'] += 1
                 
                 for stream, messages in events:
-                    for message_id, event_data in messages:
+                    for message_id, raw_msg in messages:
                         self.stats['processed'] += 1
+                        
+                        # 解析 JSON（event_data 字段是 JSON 字符串）
+                        try:
+                            if 'event_data' in raw_msg:
+                                event_data = json.loads(raw_msg['event_data'])
+                            else:
+                                event_data = raw_msg  # 兼容旧格式
+                        except (json.JSONDecodeError, TypeError) as e:
+                            logger.warning(f"JSON 解析失败: {e}")
+                            self.redis.ack_message(stream_name, consumer_group, message_id)
+                            continue
                         
                         # 去重
                         if self.scorer.is_duplicate(event_data):
