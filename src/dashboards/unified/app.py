@@ -40,14 +40,11 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 # 节点配置
 NODES = {
     'FUSION': {'name': 'Fusion Engine', 'icon': '⚡', 'role': '融合引擎'},
-    'FUSION_TURBO': {'name': 'Fusion Turbo', 'icon': '🚀', 'role': '极速融合'},
     'NODE_A': {'name': 'Exchange Monitor', 'icon': '📊', 'role': 'CEX监控'},
     'NODE_B': {'name': 'Chain Monitor', 'icon': '🔗', 'role': '链上监控'},
     'NODE_C': {'name': 'Social Monitor', 'icon': '💬', 'role': '社交监控'},
     'NODE_C_TELEGRAM': {'name': 'Telegram', 'icon': '📱', 'role': 'TG监控'},
-    'OPTIMIZED_COLLECTOR': {'name': 'Collector', 'icon': '📡', 'role': '优化采集'},
-    'TURBO_PUSHER': {'name': 'Pusher', 'icon': '📤', 'role': '推送服务'},
-    'REALTIME_LISTING': {'name': 'Listing', 'icon': '🔔', 'role': '公告监控'},
+    'WEBHOOK': {'name': 'Pusher', 'icon': '📤', 'role': '推送服务'},
 }
 
 EXCHANGES = ['binance', 'okx', 'bybit', 'kucoin', 'gate', 'bitget', 'upbit', 'bithumb', 'coinbase', 'kraken', 'mexc', 'htx']

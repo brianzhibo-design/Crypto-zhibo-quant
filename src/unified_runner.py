@@ -231,36 +231,18 @@ class UnifiedRunner:
                 logger.error(f"内存监控错误: {e}")
     
     async def heartbeat(self):
-        """统一心跳 - 为所有在线模块发送心跳"""
+        """统一心跳 - 报告 unified_runner 自身状态"""
         while self.running:
             try:
-                await asyncio.sleep(30)  # 每30秒发送一次
+                await asyncio.sleep(60)  # 每60秒
                 
                 uptime = (datetime.now(timezone.utc) - self.stats['start_time']).total_seconds()
                 
-                # 各模块心跳
-                heartbeat_modules = [
-                    ('FUSION', 'Fusion Engine', ENABLED_MODULES.get('fusion_engine', False)),
-                    ('FUSION_TURBO', 'Fusion Turbo', False),  # 暂未启用
-                    ('NODE_B', 'Chain Monitor', ENABLED_MODULES.get('collector_b', False)),
-                    ('NODE_C', 'Social Monitor', ENABLED_MODULES.get('collector_c', False)),
-                    ('NODE_C_TELEGRAM', 'Telegram', ENABLED_MODULES.get('telegram_monitor', False)),
-                    ('OPTIMIZED_COLLECTOR', 'Collector', False),  # 暂未启用
-                    ('TURBO_PUSHER', 'Pusher', ENABLED_MODULES.get('webhook_pusher', False)),
-                    ('REALTIME_LISTING', 'Listing', False),  # 暂未启用
-                ]
-                
-                for node_id, name, enabled in heartbeat_modules:
-                    if enabled:
-                        self.redis.heartbeat(node_id, {
-                            'node': node_id,
-                            'name': name,
-                            'status': 'running',
-                            'uptime_seconds': str(int(uptime)),
-                            'errors': str(self.stats['errors']),
-                        }, ttl=120)
-                
-                logger.debug(f"💓 统一心跳已发送 | 运行: {self.stats['modules_running']}模块")
+                # 各模块有自己的心跳，这里只记录总体状态
+                logger.info(
+                    f"💓 系统运行中 | 模块: {self.stats['modules_running']} | "
+                    f"运行时间: {int(uptime/60)}分钟 | 错误: {self.stats['errors']}"
+                )
                 
             except Exception as e:
                 logger.error(f"心跳错误: {e}")
