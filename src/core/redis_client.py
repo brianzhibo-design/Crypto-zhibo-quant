@@ -72,16 +72,16 @@ class RedisClient:
         object.__setattr__(self, '_db', db)
         
         # 创建连接 - 直接使用 object.__setattr__
+        # health_check_interval=0 禁用自动健康检查，避免递归问题
         _client = redis.Redis(
             host=self._host,
             port=self._port,
             password=self._password,
             db=self._db,
             decode_responses=True,
-            socket_timeout=socket_timeout,
+            health_check_interval=0,  # 👈 关键修复：禁用自动健康检查
             socket_connect_timeout=socket_connect_timeout,
-            retry_on_timeout=True,
-            health_check_interval=30,
+            socket_timeout=socket_timeout,
         )
         object.__setattr__(self, '_client', _client)
         
