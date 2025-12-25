@@ -125,10 +125,10 @@ class HealthChecker:
         
         await self._ensure_session()
         
-        webhook_url = os.getenv('WECHAT_WEBHOOK') or os.getenv('WEBHOOK_URL')
+        webhook_url = os.getenv('WECHAT_WEBHOOK_SIGNAL') or os.getenv('WECHAT_WEBHOOK') or os.getenv('WEBHOOK_URL')
         
         if not webhook_url:
-            print(warn("未配置 WECHAT_WEBHOOK 环境变量"))
+            print(warn("未配置 WECHAT_WEBHOOK_SIGNAL 环境变量"))
             self.add_result('企业微信', 'Webhook', 'warn', '未配置')
             return
         
