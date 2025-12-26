@@ -350,7 +350,7 @@ async def main():
     await client.start()
     logger.info("[OK] Telethon 已连接")
     
-    logger.info("批量解析频道实体...")
+    logger.info(f"批量解析频道实体... (共 {len(channel_entries)} 个)")
     
     input_peers = []
     for ch in channel_entries:
@@ -359,6 +359,8 @@ async def main():
             input_peers.append(peer)
         except Exception as e:
             logger.warning(f"跳过无效频道 {ch.get('username', ch['id'])}: {e}")
+    
+    logger.info(f"[OK] 创建了 {len(input_peers)} 个 InputPeerChannel")
     
     try:
         channels = await client.get_entities(input_peers)
