@@ -338,3 +338,50 @@ config = Config()
 def get_config() -> Config:
     """获取全局配置"""
     return config
+
+
+def load_yaml_config(file_path: str) -> Dict[str, Any]:
+    """
+    加载 YAML 配置文件
+    
+    Args:
+        file_path: YAML 文件路径（相对于项目根目录或绝对路径）
+    
+    Returns:
+        配置字典
+    """
+    import yaml
+    
+    # 如果是相对路径，转换为绝对路径
+    path = Path(file_path)
+    if not path.is_absolute():
+        project_root = Path(__file__).parent.parent.parent
+        path = project_root / file_path
+    
+    if not path.exists():
+        logger.warning(f"配置文件不存在: {path}")
+        return {}
+    
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
+            return data or {}
+    except Exception as e:
+        logger.error(f"加载配置文件失败: {path} - {e}")
+        return {}
+
+
+def get_redis_config() -> Dict[str, Any]:
+    """
+    获取 Redis 配置
+    
+    Returns:
+        Redis 配置字典
+    """
+    cfg = get_config()
+    return {
+        'host': cfg.REDIS_HOST,
+        'port': cfg.REDIS_PORT,
+        'password': cfg.REDIS_PASSWORD,
+        'db': cfg.REDIS_DB,
+    }
