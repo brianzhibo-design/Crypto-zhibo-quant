@@ -1,0 +1,408 @@
+# ============================================================
+# Crypto Monitor - Docker Compose 主配置
+# ============================================================
+# 4核16GB服务器优化配置
+# 总资源分配: Redis 2GB + 采集器 3GB + 融合引擎 1.5GB + 监控 2GB = ~8.5GB
+# 剩余 7.5GB 给系统和峰值使用
+
+version: '3.8'
+
+# ============================================================
+# 网络配置
+# ============================================================
+networks:
+  crypto_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# ============================================================
+# 数据卷
+# ============================================================
+volumes:
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  session_data:
+    driver: local
+
+# ============================================================
+# 服务定义
+# ============================================================
+services:
+  
+  # ----------------------------------------------------------
+  # Redis 服务
+  # ----------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: crypto-redis
+    restart: always
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      crypto_net:
+        ipv4_address: 172.28.0.2
+    ports:
+      - "6379:6379"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------
+  # 采集器服务
+  # ----------------------------------------------------------
+  
+  # 国际交易所监控
+  exchange-intl:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.collector
+    container_name: crypto-exchange-intl
+    restart: always
+    command: python -m collectors.exchanges.international
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - MODULE_NAME=exchange_intl
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    env_file:
+      - ../.env
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.2'
+
+  # 韩国交易所监控
+  exchange-kr:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.collector
+    container_name: crypto-exchange-kr
+    restart: always
+    command: python -m collectors.exchanges.korean
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - MODULE_NAME=exchange_kr
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    env_file:
+      - ../.env
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.2'
+
+  # 区块链监控
+  blockchain:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.collector
+    container_name: crypto-blockchain
+    restart: always
+    command: python -m collectors.blockchain.monitor
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - MODULE_NAME=blockchain
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - ETH_RPC_URL=${ETH_RPC_URL}
+      - BSC_RPC_URL=${BSC_RPC_URL}
+      - BASE_RPC_URL=${BASE_RPC_URL}
+      - ARBITRUM_RPC_URL=${ARBITRUM_RPC_URL}
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL}
+    env_file:
+      - ../.env
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: '0.5'
+        reservations:
+          memory: 384M
+          cpus: '0.2'
+
+  # Telegram 监控
+  telegram:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.collector
+    container_name: crypto-telegram
+    restart: always
+    command: python -m collectors.social.telegram_monitor
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - MODULE_NAME=telegram
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
+      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+    env_file:
+      - ../.env
+    volumes:
+      - session_data:/app/sessions
+      - ../config.secret:/app/config.secret:ro
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: '0.5'
+        reservations:
+          memory: 384M
+          cpus: '0.2'
+
+  # 新闻监控
+  news:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.collector
+    container_name: crypto-news
+    restart: always
+    command: python -m collectors.news.rss_monitor
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - MODULE_NAME=news
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    env_file:
+      - ../.env
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: '0.3'
+        reservations:
+          memory: 192M
+          cpus: '0.1'
+
+  # ----------------------------------------------------------
+  # 融合引擎
+  # ----------------------------------------------------------
+  fusion:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.fusion
+    container_name: crypto-fusion
+    restart: always
+    command: python -m fusion.fusion_engine_v3
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - MODULE_NAME=fusion
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    env_file:
+      - ../.env
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+          cpus: '1.0'
+        reservations:
+          memory: 768M
+          cpus: '0.5'
+
+  # ----------------------------------------------------------
+  # 推送服务
+  # ----------------------------------------------------------
+  pusher:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.collector
+    container_name: crypto-pusher
+    restart: always
+    command: python -m fusion.webhook_pusher
+    depends_on:
+      redis:
+        condition: service_healthy
+      fusion:
+        condition: service_started
+    environment:
+      - MODULE_NAME=pusher
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - WECHAT_WEBHOOK_SIGNAL=${WECHAT_WEBHOOK_SIGNAL}
+      - WECHAT_WEBHOOK_TRADE=${WECHAT_WEBHOOK_TRADE}
+    env_file:
+      - ../.env
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: '0.3'
+        reservations:
+          memory: 192M
+          cpus: '0.1'
+
+  # ----------------------------------------------------------
+  # Dashboard
+  # ----------------------------------------------------------
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboard
+    container_name: crypto-dashboard
+    restart: always
+    ports:
+      - "5000:5000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - DASHBOARD_PORT=5000
+    env_file:
+      - ../.env
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.2'
+
+  # ----------------------------------------------------------
+  # 监控服务
+  # ----------------------------------------------------------
+  
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: crypto-prometheus
+    restart: always
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ../deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.2'
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: crypto-grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.3'
+        reservations:
+          memory: 256M
+          cpus: '0.1'
+
+  # Redis Exporter (for Prometheus)
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: crypto-redis-exporter
+    restart: always
+    environment:
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.1'
+

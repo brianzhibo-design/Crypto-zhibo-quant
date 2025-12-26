@@ -1,0 +1,49 @@
+# ============================================================
+# Crypto Monitor - Fusion Engine Image
+# ============================================================
+# 融合引擎 + 推送服务
+
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ============================================================
+# 运行镜像
+# ============================================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY src/ ./src/
+COPY config/ ./config/
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src \
+    TZ=UTC
+
+RUN useradd -m -u 1000 crypto && \
+    chown -R crypto:crypto /app
+
+USER crypto
+
+# 健康检查: 检查融合引擎心跳
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import redis,os; r=redis.Redis(host=os.environ.get('REDIS_HOST','redis'),password=os.environ.get('REDIS_PASSWORD'),decode_responses=True); assert r.exists('node:heartbeat:fusion')" || exit 1
+
+CMD ["python", "-m", "fusion.fusion_engine_v3"]
+

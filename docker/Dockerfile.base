@@ -1,0 +1,58 @@
+# ============================================================
+# Crypto Monitor - Base Image
+# ============================================================
+# 所有服务共用的基础镜像
+# 优化: 多阶段构建减少最终镜像大小
+
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# 安装构建依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖文件
+COPY requirements.txt .
+
+# 安装 Python 依赖到虚拟环境
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# ============================================================
+# 运行镜像 (精简版)
+# ============================================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 复制虚拟环境
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# 复制项目代码
+COPY src/ ./src/
+COPY config/ ./config/
+
+# 环境变量
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src \
+    TZ=UTC
+
+# 创建非 root 用户
+RUN useradd -m -u 1000 crypto && \
+    chown -R crypto:crypto /app
+
+USER crypto
+
+# 默认健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s \
+    CMD exit 0
+
+CMD ["python", "--version"]
+

@@ -1,0 +1,77 @@
+# ============================================================
+# Crypto Monitor - Production Overlay
+# ============================================================
+# 用法: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: '3.8'
+
+services:
+  
+  # ----------------------------------------------------------
+  # Nginx 反向代理
+  # ----------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: crypto-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - dashboard
+      - grafana
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ----------------------------------------------------------
+  # 生产环境覆盖
+  # ----------------------------------------------------------
+  
+  # Dashboard: 使用 gunicorn 多 worker
+  dashboard:
+    command: gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 dashboards.unified.app:app
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: '0.5'
+
+  # Fusion: 增加内存限制
+  fusion:
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+
+  # Redis: 增加持久化
+  redis:
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 3gb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --save 300 100
+      --save 900 1
+      --appendonly yes
+      --appendfsync everysec
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: '1.0'
+

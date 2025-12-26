@@ -1,0 +1,83 @@
+# ============================================================
+# Prometheus Alerts - Crypto Monitor
+# ============================================================
+
+groups:
+  - name: crypto-monitor-alerts
+    rules:
+      
+      # Redis 告警
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis 服务宕机"
+          description: "Redis 服务已停止响应超过 1 分钟"
+
+      - alert: RedisHighMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis 内存使用过高"
+          description: "Redis 内存使用已超过 90%"
+
+      - alert: RedisSlowCommands
+        expr: rate(redis_commands_duration_seconds_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis 命令响应缓慢"
+          description: "Redis 平均命令执行时间超过 100ms"
+
+      # 容器告警
+      - alert: ContainerHighCPU
+        expr: rate(container_cpu_usage_seconds_total[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "容器 CPU 使用过高"
+          description: "容器 {{ $labels.name }} CPU 使用率超过 80%"
+
+      - alert: ContainerHighMemory
+        expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "容器内存使用过高"
+          description: "容器 {{ $labels.name }} 内存使用率超过 90%"
+
+      - alert: ContainerRestarting
+        expr: increase(container_restart_count[1h]) > 3
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "容器频繁重启"
+          description: "容器 {{ $labels.name }} 在过去 1 小时内重启超过 3 次"
+
+      # 业务告警
+      - alert: NoNewEvents
+        expr: increase(redis_stream_length{stream="events:raw"}[30m]) == 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "30分钟无新事件"
+          description: "events:raw 流在过去 30 分钟没有新事件"
+
+      - alert: HighErrorRate
+        expr: rate(redis_stream_length{stream="events:errors"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "错误率过高"
+          description: "系统错误率超过每分钟 1 个"
+

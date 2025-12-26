@@ -1,0 +1,60 @@
+# ============================================================
+# Crypto Monitor - Dashboard Image
+# ============================================================
+# Flask Dashboard Web 服务
+
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir gunicorn
+
+# ============================================================
+# 运行镜像
+# ============================================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 安装 curl 用于健康检查
+RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY src/ ./src/
+COPY config/ ./config/
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src \
+    TZ=UTC \
+    DASHBOARD_PORT=5000
+
+RUN useradd -m -u 1000 crypto && \
+    chown -R crypto:crypto /app
+
+USER crypto
+
+# 暴露端口
+EXPOSE 5000
+
+# 健康检查: HTTP 端点
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:5000/api/health || exit 1
+
+# 使用 gunicorn 运行 (生产环境)
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "60", "dashboards.unified.app:app"]
+

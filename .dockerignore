@@ -1,0 +1,76 @@
+# ============================================================
+# Docker Ignore - Crypto Monitor
+# ============================================================
+
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+.env/
+
+# 环境变量和敏感信息
+.env
+.env.*
+!.env.example
+config.secret/
+
+# Session 文件 (会通过 volume 挂载)
+*.session
+*.session-journal
+
+# 日志
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+
+# 临时文件
+*.tmp
+*.bak
+*.cache
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+
+# Docker
+docker/
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# 文档
+docs/
+*.md
+!README.md
+
+# Backups
+backups/
+
+# macOS
+.DS_Store
+._*
+
+# Node (如果有前端)
+node_modules/
+npm-debug.log
+
+# 数据目录
+data/
+
