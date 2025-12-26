@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Crypto Monitor Dashboard - Fusion Pro Edition
-==============================================
-Professional dark theme with real-time data feed
+Crypto Monitor Dashboard - Clean White Edition
+===============================================
+简约白色风格，集成交易通知展示
 """
 
 import json
@@ -65,7 +65,7 @@ def health():
     r = get_redis()
     return jsonify({
         'status': 'ok' if r else 'error',
-        'version': 'fusion-pro-1.0',
+        'version': 'clean-white-1.0',
         'time': datetime.now().isoformat()
     })
 
@@ -88,19 +88,17 @@ def get_status():
             ttl = r.ttl(key)
             data = r.hgetall(key)
             
-            # 判断在线：有数据，且（TTL > 0 或 TTL == -1 表示永不过期，且最近有更新）
             if data:
                 ts = data.get('timestamp', '0')
                 try:
-                    ts_int = int(ts) if len(ts) < 15 else int(ts) // 1000  # 处理毫秒时间戳
+                    ts_int = int(ts) if len(ts) < 15 else int(ts) // 1000
                     age = int(time.time()) - ts_int
-                    online = age < 300  # 5分钟内有心跳就认为在线
+                    online = age < 300
                 except:
-                    online = ttl > 0 or ttl == -1  # 无法解析时间戳时的回退逻辑
+                    online = ttl > 0 or ttl == -1
             else:
                 online = False
             
-            # Calculate latency from uptime or timestamp
             latency = "N/A"
             if data.get('uptime'):
                 latency = f"{min(int(data.get('uptime', 0)) % 100 + 5, 99)}ms"
@@ -157,7 +155,6 @@ def get_events():
                 except:
                     pass
 
-            # Determine event type
             source = data.get('source', '').lower()
             if 'whale' in source or 'whale' in data.get('raw_text', '').lower():
                 event_type = 'Whale Alert'
@@ -186,6 +183,60 @@ def get_events():
         pass
 
     return jsonify(events)
+
+
+@app.route('/api/trades')
+def get_trades():
+    """获取交易记录"""
+    r = get_redis()
+    if not r:
+        return jsonify([])
+
+    limit = request.args.get('limit', 20, type=int)
+    trades = []
+
+    try:
+        if r.exists('trades:executed'):
+            for mid, data in r.xrevrange('trades:executed', count=limit):
+                trades.append({
+                    'id': mid,
+                    'trade_id': data.get('trade_id', ''),
+                    'action': data.get('action', ''),
+                    'status': data.get('status', ''),
+                    'chain': data.get('chain', ''),
+                    'token_symbol': data.get('token_symbol', ''),
+                    'amount_in': float(data.get('amount_in', 0)),
+                    'amount_out': float(data.get('amount_out', 0)),
+                    'price_usd': float(data.get('price_usd', 0)),
+                    'gas_used': float(data.get('gas_used', 0)),
+                    'tx_hash': data.get('tx_hash', ''),
+                    'dex': data.get('dex', ''),
+                    'pnl_percent': data.get('pnl_percent'),
+                    'signal_score': float(data.get('signal_score', 0)),
+                    'timestamp': data.get('timestamp', ''),
+                })
+    except Exception as e:
+        pass
+
+    return jsonify(trades)
+
+
+@app.route('/api/trade-stats')
+def get_trade_stats():
+    """获取交易统计"""
+    r = get_redis()
+    if not r:
+        return jsonify({})
+
+    try:
+        stats = r.hgetall('stats:trades') or {}
+        return jsonify({
+            'total': int(stats.get('total', 0)),
+            'success': int(stats.get('success', 0)),
+            'failed': int(stats.get('failed', 0)),
+        })
+    except:
+        return jsonify({'total': 0, 'success': 0, 'failed': 0})
 
 
 @app.route('/api/events/super')
@@ -274,7 +325,6 @@ def get_metrics():
         for ex in EXCHANGES:
             total_pairs += r.scard(f'known_pairs:{ex}') or 0
         
-        # Calculate rates (mock for now)
         return {
             'total_events': events_raw + events_fused,
             'events_per_sec': round(events_fused / max(1, 3600) * 100, 1),
@@ -456,22 +506,25 @@ HTML = '''<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fusion Pro | Crypto Monitor</title>
+    <title>Crypto Monitor | Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
-                        mono: ['JetBrains Mono', 'monospace'],
+                        sans: ['Outfit', 'system-ui', 'sans-serif'],
+                        mono: ['IBM Plex Mono', 'monospace'],
                     },
                     colors: {
-                        slate: {
-                            850: '#1a2332',
-                            950: '#0a0f1a',
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
                         }
                     }
                 }
@@ -480,229 +533,310 @@ HTML = '''<!DOCTYPE html>
     </script>
     <style>
         body { 
-            background: #0a0f1a; 
-            color: #e2e8f0;
+            background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%);
+            color: #1e293b;
         }
-        ::selection { background: rgba(99, 102, 241, 0.3); }
-        .glow-emerald { box-shadow: 0 0 8px rgba(16, 185, 129, 0.4); }
-        .glow-amber { box-shadow: 0 0 8px rgba(245, 158, 11, 0.4); }
+        ::selection { background: rgba(14, 165, 233, 0.2); }
+        .card { 
+            background: white; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 16px; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.02);
+            transition: all 0.2s ease;
+        }
+        .card:hover { 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04);
+            transform: translateY(-1px);
+        }
         .scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .scrollbar::-webkit-scrollbar-track { background: #1e293b; }
-        .scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-        .scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
-        @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .animate-pulse-slow { animation: pulse-slow 2s ease-in-out infinite; }
-        .card { background: #0f172a; border: 1px solid #1e293b; border-radius: 0.5rem; }
-        .card:hover { border-color: #334155; }
-        .feed-row { border-left: 3px solid transparent; transition: all 0.15s ease; }
-        .feed-row:hover { background: rgba(30, 41, 59, 0.5); border-left-color: #6366f1; }
+        .scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 3px; }
+        .scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        .animate-pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
+        .feed-row { 
+            border-left: 3px solid transparent; 
+            transition: all 0.15s ease; 
+        }
+        .feed-row:hover { 
+            background: #f8fafc; 
+            border-left-color: #0ea5e9; 
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .status-online { background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
+        .status-offline { background: #f59e0b; animation: pulse-soft 1.5s infinite; }
+        .tab-active {
+            background: #0ea5e9;
+            color: white;
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #0ea5e9, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
     </style>
 </head>
 <body class="min-h-screen font-sans antialiased">
     <!-- Header -->
-    <header class="border-b border-slate-800 bg-slate-950 sticky top-0 z-50">
-        <div class="max-w-[1600px] mx-auto px-6 h-14 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="bg-indigo-600 p-1.5 rounded">
-                    <i data-lucide="layers" class="w-5 h-5 text-white"></i>
+    <header class="bg-white/80 backdrop-blur-md border-b border-slate-200/60 sticky top-0 z-50">
+        <div class="max-w-[1600px] mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+                        <i data-lucide="activity" class="w-5 h-5 text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg tracking-tight text-slate-800">
+                            Crypto<span class="gradient-text">Monitor</span>
+                        </h1>
+                        <div class="text-xs text-slate-400 font-medium">Real-time Intelligence</div>
+                    </div>
                 </div>
-                <h1 class="font-bold text-lg tracking-tight text-white">
-                    FUSION<span class="text-slate-500 font-light">PRO</span>
-                </h1>
-                <div class="h-4 w-px bg-slate-800 mx-2 hidden md:block"></div>
-                <div id="systemStatus" class="hidden md:flex items-center gap-2 text-xs font-medium text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-800">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-slow"></span>
-                    SYSTEM OPERATIONAL
+                <div class="h-8 w-px bg-slate-200 mx-2 hidden md:block"></div>
+                <div id="systemStatus" class="hidden md:flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200">
+                    <span class="status-dot status-online"></span>
+                    System Online
                 </div>
             </div>
             
-            <div class="flex items-center gap-4">
-                <div class="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-sm text-slate-400 hover:border-slate-700 cursor-pointer transition-colors" onclick="showSearch()">
+            <div class="flex items-center gap-3">
+                <div class="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-500 hover:border-slate-300 cursor-pointer transition-colors" onclick="showSearch()">
                     <i data-lucide="search" class="w-4 h-4"></i>
-                    <span class="text-xs">Search</span>
+                    <span>Search...</span>
+                    <kbd class="ml-2 px-1.5 py-0.5 bg-white rounded text-[10px] text-slate-400 border border-slate-200">⌘K</kbd>
                 </div>
-                <button onclick="loadAll()" class="h-8 w-8 flex items-center justify-center rounded hover:bg-slate-900 text-slate-400 transition-colors">
+                <button onclick="loadAll()" class="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 transition-colors">
                     <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                 </button>
                 <div class="text-right hidden md:block">
-                    <div id="currentTime" class="text-xs font-mono text-slate-400">--:--:--</div>
-                    <div class="text-[10px] text-slate-600 font-mono">UTC</div>
+                    <div id="currentTime" class="text-sm font-mono font-medium text-slate-600">--:--:--</div>
+                    <div class="text-[10px] text-slate-400">UTC</div>
                 </div>
             </div>
         </div>
     </header>
 
     <main class="max-w-[1600px] mx-auto p-6">
+        <!-- Navigation Tabs -->
+        <div class="flex items-center gap-2 mb-6">
+            <button onclick="switchTab('signals')" id="tabSignals" class="tab-active px-4 py-2 rounded-lg text-sm font-medium transition-all">
+                <i data-lucide="radio" class="w-4 h-4 inline mr-1.5"></i>Signals
+            </button>
+            <button onclick="switchTab('trades')" id="tabTrades" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
+                <i data-lucide="arrow-left-right" class="w-4 h-4 inline mr-1.5"></i>Trades
+            </button>
+            <button onclick="switchTab('nodes')" id="tabNodes" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
+                <i data-lucide="server" class="w-4 h-4 inline mr-1.5"></i>Nodes
+            </button>
+        </div>
+
         <!-- Key Metrics -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div class="card p-5 flex flex-col justify-between transition-colors">
-                <div class="flex justify-between items-start mb-2">
-                    <span class="text-slate-400 text-sm font-medium">Total Events</span>
-                    <span id="metricEventsTrend" class="text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded text-xs flex items-center gap-1">
-                        <i data-lucide="arrow-up-right" class="w-3 h-3"></i> --
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div class="card p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center">
+                        <i data-lucide="zap" class="w-5 h-5 text-sky-500"></i>
+                    </div>
+                    <span class="text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1">
+                        <i data-lucide="trending-up" class="w-3 h-3"></i>Live
                     </span>
                 </div>
-                <div>
-                    <div id="metricEvents" class="text-2xl font-bold text-slate-100 font-mono tracking-tight">--</div>
-                    <div id="metricEventsRate" class="text-xs text-slate-500 mt-1 font-mono">-- events/hour</div>
-                </div>
+                <div id="metricEvents" class="text-2xl font-bold text-slate-800 font-mono">--</div>
+                <div class="text-xs text-slate-400 mt-1">Total Events</div>
             </div>
             
-            <div class="card p-5 flex flex-col justify-between transition-colors">
-                <div class="flex justify-between items-start mb-2">
-                    <span class="text-slate-400 text-sm font-medium">Trading Pairs</span>
-                    <span class="text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded text-xs flex items-center gap-1">
-                        <i data-lucide="arrow-up-right" class="w-3 h-3"></i> Active
-                    </span>
+            <div class="card p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
+                        <i data-lucide="coins" class="w-5 h-5 text-violet-500"></i>
+                    </div>
                 </div>
-                <div>
-                    <div id="metricPairs" class="text-2xl font-bold text-slate-100 font-mono tracking-tight">--</div>
-                    <div class="text-xs text-slate-500 mt-1 font-mono">Across all exchanges</div>
-                </div>
+                <div id="metricPairs" class="text-2xl font-bold text-slate-800 font-mono">--</div>
+                <div class="text-xs text-slate-400 mt-1">Trading Pairs</div>
             </div>
             
-            <div class="card p-5 flex flex-col justify-between transition-colors">
-                <div class="flex justify-between items-start mb-2">
-                    <span class="text-slate-400 text-sm font-medium">Redis Memory</span>
-                    <span class="text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded text-xs">Stable</span>
+            <div class="card p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                        <i data-lucide="arrow-left-right" class="w-5 h-5 text-amber-500"></i>
+                    </div>
                 </div>
-                <div>
-                    <div id="metricMemory" class="text-2xl font-bold text-slate-100 font-mono tracking-tight">--</div>
-                    <div class="text-xs text-slate-500 mt-1 font-mono">Stream buffer</div>
-                </div>
+                <div id="metricTrades" class="text-2xl font-bold text-slate-800 font-mono">--</div>
+                <div class="text-xs text-slate-400 mt-1">Trades Executed</div>
             </div>
             
-            <div class="card p-5 flex flex-col justify-between transition-colors">
-                <div class="flex justify-between items-start mb-2">
-                    <span class="text-slate-400 text-sm font-medium">System Nodes</span>
-                    <span id="nodesStatus" class="text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded text-xs">--</span>
+            <div class="card p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+                        <i data-lucide="cpu" class="w-5 h-5 text-emerald-500"></i>
+                    </div>
                 </div>
-                <div>
-                    <div id="metricNodes" class="text-2xl font-bold text-slate-100 font-mono tracking-tight">--/--</div>
-                    <div class="text-xs text-slate-500 mt-1 font-mono">Online / Total</div>
-                </div>
+                <div id="metricNodes" class="text-2xl font-bold text-slate-800 font-mono">--/--</div>
+                <div class="text-xs text-slate-400 mt-1">Nodes Online</div>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
-            <!-- Left Column: System Status & AI Insight -->
+        <!-- Main Content Panels -->
+        <div id="panelSignals" class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+            <!-- Left Column -->
             <div class="xl:col-span-4 flex flex-col gap-6">
-                
-                <!-- System Nodes -->
-                <div>
-                    <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                            <i data-lucide="database" class="w-4 h-4"></i> System Nodes
-                        </h2>
-                        <button onclick="loadAll()" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium">Refresh</button>
+                <!-- AI Insight -->
+                <div class="card p-6 bg-gradient-to-br from-sky-50 to-indigo-50 border-sky-100">
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-sm">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-sky-500"></i>
+                        </div>
+                        <h3 class="font-semibold text-slate-700">AI Insight</h3>
                     </div>
-                    <div id="nodesGrid" class="flex flex-col gap-3"></div>
+                    <p id="aiInsight" class="text-sm text-slate-600 leading-relaxed mb-4">
+                        Loading market analysis...
+                    </p>
+                    <button onclick="loadInsight()" class="w-full py-2.5 bg-white hover:bg-slate-50 text-sky-600 text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 border border-sky-100 shadow-sm">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Refresh
+                    </button>
                 </div>
 
-                <!-- AI Insight Panel -->
-                <div class="bg-gradient-to-br from-indigo-900/20 to-slate-900 border border-indigo-500/20 p-5 rounded-lg relative overflow-hidden">
-                    <div class="absolute top-0 right-0 p-3 opacity-10">
-                        <i data-lucide="sparkles" class="w-24 h-24"></i>
-                    </div>
-                    <div class="relative z-10">
-                        <div class="flex items-center gap-2 mb-3">
-                            <i data-lucide="sparkles" class="w-4 h-4 text-indigo-400"></i>
-                            <h3 class="font-semibold text-indigo-100">AI Market Insight</h3>
-                        </div>
-                        <p id="aiInsight" class="text-sm text-slate-300 leading-relaxed mb-4">
-                            Loading market analysis...
-                        </p>
-                        <button onclick="loadInsight()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded transition-colors flex items-center justify-center gap-2">
-                            Refresh Analysis <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
-                        </button>
-                    </div>
+                <!-- Alpha Ranking -->
+                <div class="card p-5">
+                    <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <i data-lucide="trophy" class="w-4 h-4 text-amber-500"></i> Top Signals
+                    </h3>
+                    <div id="alphaRanking" class="space-y-3"></div>
                 </div>
 
                 <!-- Quick Actions -->
-                <div class="card p-4">
-                    <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                        <i data-lucide="zap" class="w-4 h-4"></i> Quick Actions
+                <div class="card p-5">
+                    <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                        <i data-lucide="zap" class="w-4 h-4 text-violet-500"></i> Quick Actions
                     </h3>
                     <div class="flex flex-col gap-2">
-                        <button onclick="showTest()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded transition-colors flex items-center justify-center gap-2">
-                            <i data-lucide="send" class="w-4 h-4"></i> Send Test Event
+                        <button onclick="showTest()" class="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200">
+                            <i data-lucide="send" class="w-4 h-4"></i> Test Event
                         </button>
-                        <button onclick="exportCSV()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded transition-colors flex items-center justify-center gap-2">
-                            <i data-lucide="download" class="w-4 h-4"></i> Export Data
+                        <button onclick="exportCSV()" class="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200">
+                            <i data-lucide="download" class="w-4 h-4"></i> Export CSV
                         </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Column: Real-time Feed -->
+            <!-- Right Column: Live Feed -->
             <div class="xl:col-span-8">
                 <div class="card overflow-hidden flex flex-col h-full">
-                    <!-- Toolbar -->
-                    <div class="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div class="flex items-center gap-2">
-                            <h2 class="font-semibold text-slate-200">Live Data Feed</h2>
-                            <span class="bg-slate-800 text-slate-500 text-xs px-2 py-0.5 rounded-full font-mono">Real-time</span>
+                    <div class="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
+                        <div class="flex items-center gap-3">
+                            <h2 class="font-semibold text-slate-700">Live Feed</h2>
+                            <span class="bg-emerald-50 text-emerald-600 text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-soft"></span>
+                                Streaming
+                            </span>
                         </div>
                         <div class="flex items-center gap-2">
-                            <div class="h-4 w-px bg-slate-800 mx-1"></div>
-                            <div class="flex bg-slate-950 rounded border border-slate-800 p-0.5">
-                                <button onclick="setStream('fused')" id="btnFused" class="px-3 py-1 text-xs font-medium bg-slate-800 text-slate-200 rounded shadow-sm">Fused</button>
-                                <button onclick="setStream('raw')" id="btnRaw" class="px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition-colors">Raw</button>
+                            <div class="flex bg-slate-100 rounded-lg p-0.5">
+                                <button onclick="setStream('fused')" id="btnFused" class="px-3 py-1.5 text-xs font-medium bg-white text-slate-700 rounded-md shadow-sm">Fused</button>
+                                <button onclick="setStream('raw')" id="btnRaw" class="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors">Raw</button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Data Table -->
                     <div class="overflow-x-auto scrollbar flex-1">
                         <table class="w-full text-left border-collapse">
                             <thead>
-                                <tr class="bg-slate-950/50 border-b border-slate-800 text-xs text-slate-500 uppercase tracking-wider font-medium">
-                                    <th class="py-3 px-4 w-24">Time</th>
-                                    <th class="py-3 px-4 w-20">Token</th>
+                                <tr class="bg-slate-50/80 border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wider font-medium">
+                                    <th class="py-3 px-4 w-20">Time</th>
+                                    <th class="py-3 px-4 w-24">Token</th>
                                     <th class="py-3 px-4 w-28">Type</th>
-                                    <th class="py-3 px-4">Message</th>
-                                    <th class="py-3 px-4 w-24 text-right">Score</th>
+                                    <th class="py-3 px-4">Signal</th>
+                                    <th class="py-3 px-4 w-20 text-right">Score</th>
                                 </tr>
                             </thead>
-                            <tbody id="eventsList" class="divide-y divide-slate-800/50"></tbody>
+                            <tbody id="eventsList" class="divide-y divide-slate-100"></tbody>
                         </table>
                     </div>
                     
-                    <!-- Footer -->
-                    <div class="p-3 bg-slate-950 border-t border-slate-800 text-xs text-slate-500 text-center flex items-center justify-center gap-2">
-                        <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-slow"></div>
-                        <span id="streamStatus">Connecting to data stream...</span>
+                    <div class="p-3 bg-slate-50 border-t border-slate-100 text-xs text-slate-400 text-center flex items-center justify-center gap-2">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-soft"></span>
+                        <span id="streamStatus">Connecting...</span>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Trades Panel (Hidden by default) -->
+        <div id="panelTrades" class="hidden">
+            <div class="card overflow-hidden">
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <h2 class="font-semibold text-slate-700">Trade History</h2>
+                            <div id="tradeStats" class="flex items-center gap-2 text-xs">
+                                <span class="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Success: <span id="tradeSuccess">0</span></span>
+                                <span class="bg-red-50 text-red-600 px-2 py-0.5 rounded-full">Failed: <span id="tradeFailed">0</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="overflow-x-auto scrollbar">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50/80 border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wider font-medium">
+                                <th class="py-3 px-4 w-24">Time</th>
+                                <th class="py-3 px-4 w-20">Action</th>
+                                <th class="py-3 px-4 w-24">Token</th>
+                                <th class="py-3 px-4 w-20">Chain</th>
+                                <th class="py-3 px-4">Amount</th>
+                                <th class="py-3 px-4 w-20">Price</th>
+                                <th class="py-3 px-4 w-20">PnL</th>
+                                <th class="py-3 px-4 w-20">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradesList" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+                <div id="noTrades" class="hidden p-12 text-center text-slate-400">
+                    <i data-lucide="inbox" class="w-12 h-12 mx-auto mb-4 text-slate-300"></i>
+                    <p class="font-medium">No trades yet</p>
+                    <p class="text-sm mt-1">Trades will appear here when executed</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Nodes Panel (Hidden by default) -->
+        <div id="panelNodes" class="hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="nodesGrid"></div>
+        </div>
     </main>
 
     <!-- Search Modal -->
-    <div id="searchModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50">
+    <div id="searchModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50">
         <div class="card p-5 w-full max-w-lg mx-4 max-h-[70vh] overflow-hidden">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="font-semibold text-slate-200">Search Events</h3>
-                <button onclick="closeSearch()" class="text-slate-400 hover:text-slate-200">
+                <h3 class="font-semibold text-slate-700">Search</h3>
+                <button onclick="closeSearch()" class="text-slate-400 hover:text-slate-600 transition-colors">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
             <input id="searchInput" type="text" placeholder="Search tokens, exchanges..." 
-                   class="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 mb-4"
+                   class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 mb-4"
                    onkeyup="if(event.key==='Enter')doSearch()">
             <div id="searchResults" class="max-h-[50vh] overflow-y-auto scrollbar"></div>
         </div>
     </div>
 
     <!-- Test Modal -->
-    <div id="testModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50">
+    <div id="testModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50">
         <div class="card p-5 w-full max-w-sm mx-4">
-            <h3 class="font-semibold text-slate-200 mb-4">Send Test Event</h3>
+            <h3 class="font-semibold text-slate-700 mb-4">Send Test Event</h3>
             <input id="testSymbol" type="text" placeholder="Symbol (e.g. PEPE)" 
-                   class="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 mb-4">
+                   class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 mb-4">
             <div class="flex gap-3">
-                <button onclick="sendTest()" class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium transition-colors">Send</button>
-                <button onclick="hideTest()" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-medium transition-colors">Cancel</button>
+                <button onclick="sendTest()" class="flex-1 py-2.5 bg-sky-500 hover:bg-sky-600 text-white rounded-xl font-medium transition-colors">Send</button>
+                <button onclick="hideTest()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-medium transition-colors">Cancel</button>
             </div>
             <div id="testResult" class="mt-3 text-sm text-center"></div>
         </div>
@@ -710,16 +844,7 @@ HTML = '''<!DOCTYPE html>
 
     <script>
         let currentStream = 'fused';
-
-        // Icon mapping
-        const icons = {
-            'cpu': 'cpu',
-            'layers': 'layers',
-            'activity': 'activity',
-            'message-circle': 'message-circle',
-            'send': 'send',
-            'bell': 'bell',
-        };
+        let currentTab = 'signals';
 
         // Update time
         function updateTime() {
@@ -728,6 +853,28 @@ HTML = '''<!DOCTYPE html>
         }
         setInterval(updateTime, 1000);
         updateTime();
+
+        // Tab switching
+        function switchTab(tab) {
+            currentTab = tab;
+            ['signals', 'trades', 'nodes'].forEach(t => {
+                const panel = document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1));
+                const tabBtn = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
+                if (t === tab) {
+                    panel.classList.remove('hidden');
+                    tabBtn.classList.add('tab-active');
+                    tabBtn.classList.remove('text-slate-500', 'hover:bg-slate-100');
+                } else {
+                    panel.classList.add('hidden');
+                    tabBtn.classList.remove('tab-active');
+                    tabBtn.classList.add('text-slate-500', 'hover:bg-slate-100');
+                }
+            });
+            
+            if (tab === 'trades') loadTrades();
+            if (tab === 'nodes') renderNodes();
+            lucide.createIcons();
+        }
 
         async function loadStatus() {
             try {
@@ -739,65 +886,59 @@ HTML = '''<!DOCTYPE html>
                 const total = Object.keys(nodes).length;
                 
                 document.getElementById('metricNodes').textContent = `${online}/${total}`;
-                document.getElementById('nodesStatus').textContent = online === total ? 'All Online' : `${total - online} Offline`;
-                document.getElementById('nodesStatus').className = online === total 
-                    ? 'text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded text-xs'
-                    : 'text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded text-xs';
 
                 document.getElementById('metricEvents').textContent = ((data.redis?.events_raw || 0) + (data.redis?.events_fused || 0)).toLocaleString();
                 document.getElementById('metricPairs').textContent = (data.redis?.total_pairs || 0).toLocaleString();
-                document.getElementById('metricMemory').textContent = data.redis?.memory || '-';
 
-                // System status indicator
+                // System status
                 const statusEl = document.getElementById('systemStatus');
                 if (online < total / 2) {
-                    statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse-slow"></span> DEGRADED';
-                    statusEl.className = 'hidden md:flex items-center gap-2 text-xs font-medium text-amber-400 bg-slate-900 px-2 py-1 rounded border border-amber-500/30';
+                    statusEl.innerHTML = '<span class="status-dot status-offline"></span> Degraded';
                 } else {
-                    statusEl.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-slow"></span> SYSTEM OPERATIONAL';
-                    statusEl.className = 'hidden md:flex items-center gap-2 text-xs font-medium text-slate-400 bg-slate-900 px-2 py-1 rounded border border-slate-800';
+                    statusEl.innerHTML = '<span class="status-dot status-online"></span> System Online';
                 }
 
-                renderNodes(nodes);
+                window._nodes = nodes;
+                if (currentTab === 'nodes') renderNodes();
             } catch (e) { 
-                console.error(e); 
-                document.getElementById('systemStatus').innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500"></span> OFFLINE';
+                console.error(e);
             }
         }
 
-        function renderNodes(nodes) {
+        function renderNodes() {
+            const nodes = window._nodes || {};
             const c = document.getElementById('nodesGrid');
             let h = '';
             
             for (const [id, n] of Object.entries(nodes)) {
-                const statusClass = n.online ? 'bg-slate-800 text-slate-300' : 'bg-amber-900/20 text-amber-500';
-                const dotClass = n.online ? 'bg-emerald-500 glow-emerald' : 'bg-amber-500 animate-pulse-slow glow-amber';
-                const latency = n.latency || 'N/A';
-                const load = Math.min(Math.floor(Math.random() * 60) + 20, 95);
+                const statusClass = n.online ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/50';
+                const dotClass = n.online ? 'status-online' : 'status-offline';
+                const iconBg = n.online ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600';
                 
                 h += `
-                <div class="card p-4 flex items-center justify-between group transition-colors">
-                    <div class="flex items-center gap-4">
-                        <div class="p-2.5 rounded-md ${statusClass}">
-                            <i data-lucide="${n.icon || 'box'}" class="w-4 h-4"></i>
-                        </div>
-                        <div>
-                            <h4 class="text-sm font-medium text-slate-200">${n.name || id}</h4>
-                            <div class="flex items-center gap-3 mt-1.5">
-                                <div class="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
-                                    <i data-lucide="activity" class="w-3 h-3"></i>
-                                    ${latency}
-                                </div>
-                                <div class="flex items-center gap-1.5 text-xs text-slate-500 font-mono w-20">
-                                    <i data-lucide="server" class="w-3 h-3"></i>
-                                    <div class="h-1.5 flex-1 bg-slate-800 rounded-full overflow-hidden">
-                                        <div class="h-full rounded-full ${load > 80 ? 'bg-amber-500' : 'bg-emerald-500'}" style="width:${load}%"></div>
-                                    </div>
-                                </div>
+                <div class="card p-5 ${statusClass}">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center">
+                                <i data-lucide="${n.icon || 'box'}" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-medium text-slate-700">${n.name || id}</h4>
+                                <div class="text-xs text-slate-400">${n.role || 'Module'}</div>
                             </div>
                         </div>
+                        <div class="status-dot ${dotClass}"></div>
                     </div>
-                    <div class="h-2 w-2 rounded-full ${dotClass}"></div>
+                    <div class="flex items-center gap-4 text-xs text-slate-500">
+                        <div class="flex items-center gap-1.5">
+                            <i data-lucide="activity" class="w-3 h-3"></i>
+                            ${n.latency || 'N/A'}
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <i data-lucide="clock" class="w-3 h-3"></i>
+                            TTL: ${n.ttl > 0 ? n.ttl + 's' : 'N/A'}
+                        </div>
+                    </div>
                 </div>`;
             }
             c.innerHTML = h;
@@ -811,51 +952,156 @@ HTML = '''<!DOCTYPE html>
                 const c = document.getElementById('eventsList');
 
                 if (!events.length) {
-                    c.innerHTML = '<tr><td colspan="5" class="text-center text-slate-500 py-12">Waiting for events...</td></tr>';
+                    c.innerHTML = '<tr><td colspan="5" class="text-center text-slate-400 py-12">Waiting for events...</td></tr>';
                     return;
                 }
 
                 let h = '';
                 for (const e of events) {
-                    const t = e.ts ? new Date(parseInt(e.ts)).toLocaleTimeString('en-US', {hour12: false}) : '--:--:--';
+                    const t = e.ts ? new Date(parseInt(e.ts)).toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit'}) : '--:--';
                     const score = parseFloat(e.score || 0);
                     
-                    // Type styling
-                    let typeClass = 'bg-slate-800 text-slate-400 border-slate-700';
-                    if (e.type === 'Whale Alert') typeClass = 'bg-purple-500/10 text-purple-400 border-purple-500/20';
-                    else if (e.type === 'New Listing') typeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-                    else if (e.type === 'Volume Spike') typeClass = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+                    let typeClass = 'bg-slate-100 text-slate-500';
+                    let typeIcon = 'radio';
+                    if (e.type === 'Whale Alert') { typeClass = 'bg-purple-100 text-purple-600'; typeIcon = 'fish'; }
+                    else if (e.type === 'New Listing') { typeClass = 'bg-blue-100 text-blue-600'; typeIcon = 'plus-circle'; }
+                    else if (e.type === 'Volume Spike') { typeClass = 'bg-amber-100 text-amber-600'; typeIcon = 'trending-up'; }
+
+                    let scoreColor = 'bg-slate-200';
+                    if (score > 70) scoreColor = 'bg-emerald-400';
+                    else if (score > 40) scoreColor = 'bg-sky-400';
 
                     h += `
-                    <tr class="feed-row hover:bg-slate-800/30 transition-colors text-sm">
-                        <td class="py-3 px-4 font-mono text-slate-500 whitespace-nowrap">${t}</td>
+                    <tr class="feed-row hover:bg-slate-50/80 transition-colors text-sm">
+                        <td class="py-3 px-4 font-mono text-slate-400 text-xs">${t}</td>
                         <td class="py-3 px-4">
-                            <span class="font-bold text-slate-200">${e.symbol}</span>
+                            <span class="font-semibold text-slate-700">${e.symbol}</span>
                         </td>
                         <td class="py-3 px-4">
-                            <div class="inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium whitespace-nowrap ${typeClass}">
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${typeClass}">
+                                <i data-lucide="${typeIcon}" class="w-3 h-3"></i>
                                 ${e.type || 'Signal'}
-                            </div>
+                            </span>
                         </td>
-                        <td class="py-3 px-4 text-slate-300 max-w-xs truncate" title="${e.text}">
-                            <span class="text-slate-500 mr-2 text-xs">[${e.exchange}]</span>
+                        <td class="py-3 px-4 text-slate-500 max-w-xs truncate text-sm" title="${e.text}">
+                            <span class="text-slate-400 mr-1 text-xs">${e.exchange}</span>
                             ${e.text || '-'}
                         </td>
                         <td class="py-3 px-4 text-right">
                             <div class="flex items-center justify-end gap-2">
-                                <div class="h-1.5 w-16 bg-slate-800 rounded-full overflow-hidden">
-                                    <div class="h-full ${score > 70 ? 'bg-emerald-500' : score > 40 ? 'bg-slate-500' : 'bg-slate-600'}" style="width:${Math.min(score, 100)}%"></div>
+                                <div class="h-1.5 w-12 bg-slate-100 rounded-full overflow-hidden">
+                                    <div class="h-full ${scoreColor}" style="width:${Math.min(score, 100)}%"></div>
                                 </div>
-                                <span class="font-mono text-xs text-slate-500 w-6">${score.toFixed(0)}</span>
+                                <span class="font-mono text-xs text-slate-400 w-5">${score.toFixed(0)}</span>
                             </div>
                         </td>
                     </tr>`;
                 }
                 c.innerHTML = h;
-                document.getElementById('streamStatus').textContent = `Stream active · ${events.length} events loaded`;
+                document.getElementById('streamStatus').textContent = `${events.length} events loaded`;
+                lucide.createIcons();
             } catch (e) { 
                 console.error(e);
                 document.getElementById('streamStatus').textContent = 'Connection error';
+            }
+        }
+
+        async function loadTrades() {
+            try {
+                const [tradesRes, statsRes] = await Promise.all([
+                    fetch('/api/trades?limit=20'),
+                    fetch('/api/trade-stats')
+                ]);
+                const trades = await tradesRes.json();
+                const stats = await statsRes.json();
+
+                document.getElementById('metricTrades').textContent = (stats.total || 0).toString();
+                document.getElementById('tradeSuccess').textContent = stats.success || 0;
+                document.getElementById('tradeFailed').textContent = stats.failed || 0;
+
+                const c = document.getElementById('tradesList');
+                const noTrades = document.getElementById('noTrades');
+
+                if (!trades.length) {
+                    c.innerHTML = '';
+                    noTrades.classList.remove('hidden');
+                    return;
+                }
+
+                noTrades.classList.add('hidden');
+                let h = '';
+                for (const t of trades) {
+                    const time = t.timestamp ? new Date(parseInt(t.timestamp)).toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit'}) : '--:--';
+                    
+                    const actionClass = t.action === 'buy' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600';
+                    const statusClass = t.status === 'success' ? 'bg-emerald-100 text-emerald-600' : t.status === 'failed' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600';
+                    
+                    let pnlHtml = '-';
+                    if (t.pnl_percent !== null && t.pnl_percent !== undefined) {
+                        const pnlClass = parseFloat(t.pnl_percent) >= 0 ? 'text-emerald-600' : 'text-red-600';
+                        pnlHtml = `<span class="${pnlClass} font-medium">${parseFloat(t.pnl_percent) >= 0 ? '+' : ''}${parseFloat(t.pnl_percent).toFixed(2)}%</span>`;
+                    }
+
+                    h += `
+                    <tr class="feed-row hover:bg-slate-50/80 transition-colors text-sm">
+                        <td class="py-3 px-4 font-mono text-slate-400 text-xs">${time}</td>
+                        <td class="py-3 px-4">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${actionClass}">
+                                ${t.action?.toUpperCase() || '-'}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 font-semibold text-slate-700">${t.token_symbol || '-'}</td>
+                        <td class="py-3 px-4 text-slate-500 text-xs uppercase">${t.chain || '-'}</td>
+                        <td class="py-3 px-4 font-mono text-slate-600 text-xs">
+                            ${t.amount_in?.toFixed(4) || '0'} → ${t.amount_out?.toFixed(4) || '0'}
+                        </td>
+                        <td class="py-3 px-4 font-mono text-slate-600 text-xs">$${t.price_usd?.toFixed(6) || '0'}</td>
+                        <td class="py-3 px-4">${pnlHtml}</td>
+                        <td class="py-3 px-4">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusClass}">
+                                ${t.status || '-'}
+                            </span>
+                        </td>
+                    </tr>`;
+                }
+                c.innerHTML = h;
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function loadAlpha() {
+            try {
+                const res = await fetch('/api/alpha');
+                const data = await res.json();
+                const c = document.getElementById('alphaRanking');
+
+                if (!data.length) {
+                    c.innerHTML = '<div class="text-center text-slate-400 text-sm py-4">No signals yet</div>';
+                    return;
+                }
+
+                let h = '';
+                for (let i = 0; i < Math.min(data.length, 5); i++) {
+                    const r = data[i];
+                    const rankColor = i === 0 ? 'text-amber-500' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-700' : 'text-slate-300';
+                    h += `
+                    <div class="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors">
+                        <div class="w-6 h-6 rounded-full bg-white flex items-center justify-center text-xs font-bold ${rankColor} shadow-sm">
+                            ${i + 1}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-semibold text-slate-700 text-sm">${r.symbol}</div>
+                            <div class="text-xs text-slate-400 truncate">${r.exchange} · ${r.time_ago}</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-mono text-sm font-semibold text-sky-600">${r.score.toFixed(0)}</div>
+                        </div>
+                    </div>`;
+                }
+                c.innerHTML = h;
+            } catch (e) {
+                console.error(e);
             }
         }
 
@@ -873,11 +1119,11 @@ HTML = '''<!DOCTYPE html>
         function setStream(s) {
             currentStream = s;
             document.getElementById('btnFused').className = s === 'fused' 
-                ? 'px-3 py-1 text-xs font-medium bg-slate-800 text-slate-200 rounded shadow-sm'
-                : 'px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition-colors';
+                ? 'px-3 py-1.5 text-xs font-medium bg-white text-slate-700 rounded-md shadow-sm'
+                : 'px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors';
             document.getElementById('btnRaw').className = s === 'raw'
-                ? 'px-3 py-1 text-xs font-medium bg-slate-800 text-slate-200 rounded shadow-sm'
-                : 'px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition-colors';
+                ? 'px-3 py-1.5 text-xs font-medium bg-white text-slate-700 rounded-md shadow-sm'
+                : 'px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors';
             loadEvents();
         }
 
@@ -896,31 +1142,31 @@ HTML = '''<!DOCTYPE html>
             const q = document.getElementById('searchInput').value;
             if (!q || q.length < 2) return;
             
-            document.getElementById('searchResults').innerHTML = '<div class="text-center text-slate-500 py-4">Searching...</div>';
+            document.getElementById('searchResults').innerHTML = '<div class="text-center text-slate-400 py-4">Searching...</div>';
             
             try {
                 const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
                 const data = await res.json();
                 
                 if (!data.results?.length) {
-                    document.getElementById('searchResults').innerHTML = '<div class="text-center text-slate-500 py-4">No results found</div>';
+                    document.getElementById('searchResults').innerHTML = '<div class="text-center text-slate-400 py-4">No results found</div>';
                     return;
                 }
                 
                 let h = '';
                 for (const r of data.results) {
                     h += `
-                    <div class="py-3 border-b border-slate-800">
+                    <div class="py-3 border-b border-slate-100">
                         <div class="flex items-center justify-between mb-1">
-                            <span class="font-mono font-semibold text-indigo-400">${r.symbol}</span>
-                            <span class="text-xs text-slate-500">${r.exchange}</span>
+                            <span class="font-semibold text-sky-600">${r.symbol}</span>
+                            <span class="text-xs text-slate-400">${r.exchange}</span>
                         </div>
-                        <div class="text-xs text-slate-400">${r.text}</div>
+                        <div class="text-xs text-slate-500">${r.text}</div>
                     </div>`;
                 }
                 document.getElementById('searchResults').innerHTML = h;
             } catch (e) {
-                document.getElementById('searchResults').innerHTML = '<div class="text-center text-rose-500 py-4">Search failed</div>';
+                document.getElementById('searchResults').innerHTML = '<div class="text-center text-red-500 py-4">Search failed</div>';
             }
         }
 
@@ -945,11 +1191,11 @@ HTML = '''<!DOCTYPE html>
                 });
                 const data = await res.json();
                 document.getElementById('testResult').innerHTML = data.success 
-                    ? '<span class="text-emerald-400">Event sent successfully</span>'
-                    : '<span class="text-rose-400">Failed to send</span>';
+                    ? '<span class="text-emerald-500">Event sent successfully</span>'
+                    : '<span class="text-red-500">Failed to send</span>';
                 if (data.success) setTimeout(() => { hideTest(); loadEvents(); }, 1000);
             } catch (e) {
-                document.getElementById('testResult').innerHTML = '<span class="text-rose-400">Request failed</span>';
+                document.getElementById('testResult').innerHTML = '<span class="text-red-500">Request failed</span>';
             }
         }
 
@@ -961,6 +1207,8 @@ HTML = '''<!DOCTYPE html>
             loadStatus();
             loadEvents();
             loadInsight();
+            loadAlpha();
+            loadTrades();
         }
 
         // Initialize
@@ -970,6 +1218,7 @@ HTML = '''<!DOCTYPE html>
             setInterval(loadStatus, 5000);
             setInterval(loadEvents, 8000);
             setInterval(loadInsight, 60000);
+            setInterval(loadAlpha, 15000);
         });
 
         // Keyboard shortcuts
