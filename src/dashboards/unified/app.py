@@ -27,7 +27,7 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-# 功能模块配置
+# 功能模块配置 - 仅使用新的功能性键名
 NODES = {
     'FUSION': {'name': 'Fusion Engine', 'icon': 'cpu', 'role': 'Core'},
     'EXCHANGE': {'name': 'Exchange Link', 'icon': 'layers', 'role': 'CEX'},
@@ -86,9 +86,20 @@ def get_status():
         try:
             ttl = r.ttl(key)
             data = r.hgetall(key)
-            online = bool(data) and ttl > 0
             
-            # Calculate latency from uptime
+            # 判断在线：有数据，且（TTL > 0 或 TTL == -1 表示永不过期，且最近有更新）
+            if data:
+                ts = data.get('timestamp', '0')
+                try:
+                    ts_int = int(ts) if len(ts) < 15 else int(ts) // 1000  # 处理毫秒时间戳
+                    age = int(time.time()) - ts_int
+                    online = age < 300  # 5分钟内有心跳就认为在线
+                except:
+                    online = ttl > 0 or ttl == -1  # 无法解析时间戳时的回退逻辑
+            else:
+                online = False
+            
+            # Calculate latency from uptime or timestamp
             latency = "N/A"
             if data.get('uptime'):
                 latency = f"{min(int(data.get('uptime', 0)) % 100 + 5, 99)}ms"
