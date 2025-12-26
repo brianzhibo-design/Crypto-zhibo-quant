@@ -1,24 +1,49 @@
 [Unit]
-Description=Crypto Monitor - Listing Tracker
+Description=Crypto Monitor - Listing Tracker & Signal System
+Documentation=https://github.com/brianzhibo-design/Crypto-zhibo-quant
 After=network.target redis.service
 Wants=redis.service
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/root/v8.3_crypto_monitor
-Environment=PYTHONPATH=/root/v8.3_crypto_monitor/src
-EnvironmentFile=/root/v8.3_crypto_monitor/.env
+Group=root
+WorkingDirectory=/root/crypto-monitor
 
-ExecStart=/root/v8.3_crypto_monitor/venv/bin/python -m src.unified_runner
+# 环境配置
+Environment=PYTHONPATH=/root/crypto-monitor/src
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/root/crypto-monitor/.env
 
+# 启动命令
+ExecStart=/root/crypto-monitor/venv/bin/python -m src.unified_runner
+
+# 资源限制（4核8G优化）
+MemoryMax=6G
+CPUQuota=300%
+
+# 重启策略
 Restart=always
 RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
+# 优雅关闭
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+# 日志
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=crypto-monitor
 
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/root/crypto-monitor/logs /root/crypto-monitor/data
+PrivateTmp=true
+
 [Install]
 WantedBy=multi-user.target
-

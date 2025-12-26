@@ -1,142 +1,127 @@
-# Crypto Monitor
+# Crypto Monitor v10
 
-Real-time cryptocurrency listing monitor and trading signal system.
+实时加密货币上币信号监控与推送系统。
 
-## Quick Start (Production)
+## 功能特性
 
-### Option 1: Systemd (Recommended)
+- **多源监控**: 14+ 交易所、Telegram、Twitter、新闻 RSS
+- **智能评分**: 多因子融合算法，识别高价值信号
+- **实时推送**: 企业微信即时通知
+- **Web 仪表盘**: 实时状态可视化
+
+## 快速开始
+
+### 1. 环境要求
+
+- Ubuntu 22.04 / 24.04
+- Python 3.11+
+- Redis 7.0+
+- 4 核 8GB 内存（推荐）
+
+### 2. 安装
 
 ```bash
-# 1. Clone
+# 克隆代码
 git clone https://github.com/brianzhibo-design/Crypto-zhibo-quant.git
 cd Crypto-zhibo-quant
 
-# 2. Setup Python environment
+# 创建虚拟环境
 python3 -m venv venv
 source venv/bin/activate
+
+# 安装依赖
 pip install -r requirements.txt
+```
 
-# 3. Configure
+### 3. 配置
+
+```bash
+# 复制环境变量模板
 cp env.example .env
-nano .env  # Fill in your API keys
 
-# 4. Install systemd service
+# 编辑配置
+nano .env
+```
+
+必填项：
+- `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`
+- `WECHAT_WEBHOOK` - 企业微信机器人 Webhook
+
+可选项：
+- `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` - Telegram 监控
+- `ONEINCH_API_KEY` - DEX 交易功能
+
+### 4. 启动
+
+```bash
+# 开发模式
+python -m src.unified_runner
+
+# 生产模式（Systemd）
 sudo cp deployment/systemd/crypto-monitor.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable crypto-monitor
 sudo systemctl start crypto-monitor
-
-# 5. Check status
-sudo systemctl status crypto-monitor
-journalctl -u crypto-monitor -f
 ```
 
-### Option 2: Docker
+### 5. 访问 Dashboard
 
 ```bash
-# 1. Clone and configure
-git clone https://github.com/brianzhibo-design/Crypto-zhibo-quant.git
-cd Crypto-zhibo-quant
-cp env.example .env
-nano .env
-
-# 2. Start with Docker Compose
-cd deploy
-docker-compose -f docker-compose.single.yml up -d
-
-# 3. Check logs
-docker logs -f crypto-monitor
-
-# 4. Optional: Start Dashboard
-docker-compose -f docker-compose.single.yml --profile dashboard up -d
-```
-
-### Option 3: Direct Run
-
-```bash
-source venv/bin/activate
-python -m src.unified_runner
-```
-
-## Architecture
-
-```
-unified_runner.py
-├── collector_a     # CEX monitoring (10 exchanges)
-├── collector_b     # Blockchain + News
-├── collector_c     # Korean exchanges
-├── telegram_monitor # Telegram channels
-├── fusion_engine   # Signal scoring
-└── webhook_pusher  # WeChat notifications
-
-Redis Streams: events:raw -> events:fused -> notifications
-```
-
-## Required Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `REDIS_HOST` | Redis server | Yes |
-| `REDIS_PASSWORD` | Redis password | Yes |
-| `WECHAT_WEBHOOK` | WeChat webhook URL | Yes |
-| `TELEGRAM_API_ID` | Telegram API ID | For TG monitor |
-| `TELEGRAM_API_HASH` | Telegram API Hash | For TG monitor |
-
-See `env.example` for all options.
-
-## Dashboard
-
-```bash
-# Start Dashboard
+# 启动 Dashboard
 cd src/dashboards/unified
 python app.py
 
-# Access at http://localhost:5000
+# 访问 http://localhost:5000
 ```
 
-## Monitoring
+## 目录结构
+
+```
+crypto-monitor/
+├── src/
+│   ├── collectors/        # 数据采集模块
+│   │   ├── node_a/        # 交易所监控
+│   │   ├── node_b/        # 区块链+新闻
+│   │   └── node_c/        # 韩国+Telegram
+│   ├── core/              # 核心组件
+│   ├── fusion/            # 融合引擎
+│   ├── dashboards/        # Web 仪表盘
+│   └── unified_runner.py  # 统一启动器
+├── config/                # 配置文件
+├── deployment/            # 部署脚本
+├── docs/                  # 文档
+├── tests/                 # 测试
+├── tools/                 # 工具脚本
+├── requirements.txt       # 依赖
+└── .env                   # 环境变量（需创建）
+```
+
+## 模块说明
+
+| 模块 | 说明 |
+|------|------|
+| EXCHANGE | 交易所 API 监控（Binance, OKX, Bybit 等） |
+| BLOCKCHAIN | 区块链数据监控（ETH, BSC, SOL） |
+| SOCIAL | 韩国交易所（Upbit, Bithumb） |
+| TELEGRAM | Telegram 频道实时监控 |
+| FUSION | 信号融合评分引擎 |
+| PUSHER | 企业微信推送 |
+
+## 运维
 
 ```bash
-# View logs
+# 健康检查
+./tools/health_monitor.sh
+
+# 查看日志
 journalctl -u crypto-monitor -f
 
-# Check heartbeats
-redis-cli -a "$REDIS_PASSWORD" KEYS "node:heartbeat:*"
-
-# Health check
-python tests/quick_health_check.py
+# 重启服务
+sudo systemctl restart crypto-monitor
 ```
 
-## Troubleshooting
-
-### Service won't start
-```bash
-# Check logs
-journalctl -u crypto-monitor -n 100
-
-# Test manually
-source venv/bin/activate
-python -m src.unified_runner
-```
-
-### Redis connection failed
-```bash
-# Check Redis
-redis-cli -a "$REDIS_PASSWORD" ping
-
-# Check .env
-grep REDIS .env
-```
-
-### Telegram not working
-```bash
-# Check session file exists
-ls -la src/collectors/node_c/*.session
-
-# Check API credentials
-grep TELEGRAM .env
-```
+详见 [运维手册](docs/OPERATIONS.md)
 
 ## License
 
-Private - All rights reserved.
+MIT
