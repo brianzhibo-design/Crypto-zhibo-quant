@@ -155,8 +155,11 @@ services:
       - BASE_RPC_URL=${BASE_RPC_URL}
       - ARBITRUM_RPC_URL=${ARBITRUM_RPC_URL}
       - SOLANA_RPC_URL=${SOLANA_RPC_URL}
+      - WALLET_MASTER_PASSWORD=${WALLET_MASTER_PASSWORD}
     env_file:
       - ../.env
+    volumes:
+      - ../config.secret:/app/config.secret:ro
     networks:
       - crypto_net
     deploy:
@@ -249,8 +252,11 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - WALLET_MASTER_PASSWORD=${WALLET_MASTER_PASSWORD}
     env_file:
       - ../.env
+    volumes:
+      - ../config.secret:/app/config.secret:ro
     networks:
       - crypto_net
     deploy:
@@ -284,8 +290,11 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - WECHAT_WEBHOOK_SIGNAL=${WECHAT_WEBHOOK_SIGNAL}
       - WECHAT_WEBHOOK_TRADE=${WECHAT_WEBHOOK_TRADE}
+      - WALLET_MASTER_PASSWORD=${WALLET_MASTER_PASSWORD}
     env_file:
       - ../.env
+    volumes:
+      - ../config.secret:/app/config.secret:ro
     networks:
       - crypto_net
     deploy:
@@ -316,8 +325,11 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - DASHBOARD_PORT=5000
+      - WALLET_MASTER_PASSWORD=${WALLET_MASTER_PASSWORD}
     env_file:
       - ../.env
+    volumes:
+      - ../config.secret:/app/config.secret:ro
     networks:
       - crypto_net
     deploy:
