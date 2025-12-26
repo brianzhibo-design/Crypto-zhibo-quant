@@ -74,6 +74,16 @@ class TradeNotification:
 class TradeNotifier:
     """交易通知器"""
     
+    # RPC 配置
+    CHAIN_RPC = {
+        'ethereum': 'ETHEREUM_RPC_URL',
+        'eth': 'ETHEREUM_RPC_URL',
+        'bsc': 'BSC_RPC_URL',
+        'base': 'BASE_RPC_URL',
+        'arbitrum': 'ARBITRUM_RPC_URL',
+        'polygon': 'POLYGON_RPC_URL',
+    }
+    
     def __init__(self):
         # 企业微信配置
         self.wechat_signal_webhook = os.getenv('WECHAT_WEBHOOK_SIGNAL', '')
@@ -86,6 +96,13 @@ class TradeNotifier:
         # Redis
         self.redis_client = None
         
+        # Web3 缓存
+        self._w3_cache: Dict = {}
+        
+        # 余额缓存 (避免频繁查询)
+        self._balance_cache: Dict = {}
+        self._balance_cache_ttl = 10  # 10秒缓存
+        
         # 统计
         self.stats = {
             'notifications_sent': 0,
@@ -97,6 +114,86 @@ class TradeNotifier:
         
         logger.info("TradeNotifier 初始化完成")
     
+    async def _get_wallet_balances(self, wallet_address: str, chain: str) -> Dict:
+        """
+        异步获取钱包余额 (不阻塞交易)
+        
+        Returns:
+            {
+                'native': float,  # 原生代币余额
+                'native_usd': float,  # USD 价值
+                'chain': str,
+            }
+        """
+        import time
+        
+        cache_key = f"{chain}:{wallet_address}"
+        now = time.time()
+        
+        # 检查缓存
+        if cache_key in self._balance_cache:
+            cached = self._balance_cache[cache_key]
+            if now - cached['time'] < self._balance_cache_ttl:
+                return cached['data']
+        
+        try:
+            # 动态导入 Web3 (避免启动时导入)
+            from web3 import Web3
+            
+            # 获取 RPC URL
+            rpc_env = self.CHAIN_RPC.get(chain.lower())
+            if not rpc_env:
+                return {'native': 0, 'native_usd': 0, 'chain': chain, 'error': 'unsupported_chain'}
+            
+            rpc_url = os.getenv(rpc_env)
+            if not rpc_url:
+                return {'native': 0, 'native_usd': 0, 'chain': chain, 'error': 'no_rpc'}
+            
+            # 使用缓存的 Web3 实例
+            if chain not in self._w3_cache:
+                self._w3_cache[chain] = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={'timeout': 3}))
+            
+            w3 = self._w3_cache[chain]
+            
+            # 异步获取余额 (使用线程避免阻塞)
+            balance_wei = await asyncio.wait_for(
+                asyncio.to_thread(w3.eth.get_balance, wallet_address),
+                timeout=3.0
+            )
+            
+            balance = balance_wei / 1e18
+            
+            # 估算 USD 价值 (简化)
+            price_map = {
+                'ethereum': 3500,
+                'eth': 3500,
+                'bsc': 700,
+                'base': 3500,
+                'arbitrum': 3500,
+                'polygon': 0.5,
+            }
+            price = price_map.get(chain.lower(), 0)
+            balance_usd = balance * price
+            
+            result = {
+                'native': balance,
+                'native_usd': balance_usd,
+                'chain': chain,
+                'symbol': 'ETH' if chain.lower() in ['ethereum', 'eth', 'base', 'arbitrum'] else 'BNB' if chain.lower() == 'bsc' else 'MATIC',
+            }
+            
+            # 更新缓存
+            self._balance_cache[cache_key] = {'data': result, 'time': now}
+            
+            return result
+            
+        except asyncio.TimeoutError:
+            logger.debug(f"获取余额超时: {chain}")
+            return {'native': 0, 'native_usd': 0, 'chain': chain, 'error': 'timeout'}
+        except Exception as e:
+            logger.debug(f"获取余额失败: {e}")
+            return {'native': 0, 'native_usd': 0, 'chain': chain, 'error': str(e)}
+    
     def connect_redis(self):
         """连接Redis"""
         if not self.redis_client:
@@ -105,23 +202,45 @@ class TradeNotifier:
     async def notify(self, notification: TradeNotification) -> bool:
         """
         发送交易通知到所有渠道
+        余额查询与通知发送并行执行，不影响交易速度
         """
         self.stats['notifications_sent'] += 1
         
-        # 保存到Redis
-        await self._save_to_redis(notification)
-        
-        # 并行发送到多个渠道
+        # 并行执行: 保存Redis + 获取余额 + 发送通知
         tasks = []
         
+        # 1. 保存到Redis (异步)
+        tasks.append(self._save_to_redis(notification))
+        
+        # 2. 获取钱包余额 (异步，有超时保护)
+        balance_task = None
+        if notification.wallet_address:
+            balance_task = asyncio.create_task(
+                self._get_wallet_balances(notification.wallet_address, notification.chain)
+            )
+        
+        # 3. 准备发送通知的任务
+        notify_tasks = []
+        
+        # 等待余额查询完成 (最多等待3秒)
+        balance_info = None
+        if balance_task:
+            try:
+                balance_info = await asyncio.wait_for(balance_task, timeout=3.0)
+            except asyncio.TimeoutError:
+                balance_info = {'native': 0, 'native_usd': 0, 'chain': notification.chain, 'error': 'timeout'}
+            except Exception:
+                balance_info = None
+        
+        # 4. 发送通知 (带余额信息)
         if self.wechat_trade_webhook or self.wechat_signal_webhook:
-            tasks.append(self._send_wechat(notification))
+            notify_tasks.append(self._send_wechat(notification, balance_info))
         
         if self.telegram_bot_token and self.telegram_chat_id:
-            tasks.append(self._send_telegram(notification))
+            notify_tasks.append(self._send_telegram(notification, balance_info))
         
-        if tasks:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+        if notify_tasks:
+            results = await asyncio.gather(*notify_tasks, return_exceptions=True)
             success = all(r is True for r in results if not isinstance(r, Exception))
             return success
         
@@ -149,7 +268,7 @@ class TradeNotifier:
         except Exception as e:
             logger.error(f"保存交易记录到Redis失败: {e}")
     
-    async def _send_wechat(self, notification: TradeNotification) -> bool:
+    async def _send_wechat(self, notification: TradeNotification, balance_info: Optional[Dict] = None) -> bool:
         """发送到企业微信 - 详细版"""
         webhook_url = self.wechat_trade_webhook or self.wechat_signal_webhook
         if not webhook_url:
@@ -197,6 +316,9 @@ class TradeNotifier:
             # 合约地址缩写
             addr_short = f"{notification.token_address[:6]}...{notification.token_address[-4:]}" if notification.token_address and len(notification.token_address) > 10 else notification.token_address
             
+            # 钱包地址缩写
+            wallet_short = f"{notification.wallet_address[:6]}...{notification.wallet_address[-4:]}" if notification.wallet_address and len(notification.wallet_address) > 10 else 'N/A'
+            
             # 构建详细消息
             content = f"""{status['emoji']} **交易执行通知 - {status['text']}**
 
@@ -226,6 +348,21 @@ class TradeNotifier:
 ⛽ **Gas Used**: {notification.gas_used:.6f} {chain['symbol']}
 📊 **Gas Price**: {notification.gas_price_gwei:.2f} Gwei
 💸 **Gas 成本**: ${notification.gas_used * notification.gas_price_gwei * 0.000000001 * 3000:.4f} (估)
+
+━━━━━━━━ 👛 钱包状态 ━━━━━━━━
+
+🔑 **钱包**: `{wallet_short}`
+"""
+            
+            # 添加余额信息
+            if balance_info and not balance_info.get('error'):
+                native_balance = balance_info.get('native', 0)
+                native_usd = balance_info.get('native_usd', 0)
+                balance_symbol = balance_info.get('symbol', chain['symbol'])
+                content += f"""💰 **余额**: {native_balance:.4f} {balance_symbol} (~${native_usd:.2f})
+"""
+            else:
+                content += """💰 **余额**: 查询中...
 """
             
             # 盈亏信息（卖出时显示）
@@ -295,7 +432,7 @@ class TradeNotifier:
             self.stats['wechat_failed'] += 1
             return False
     
-    async def _send_telegram(self, notification: TradeNotification) -> bool:
+    async def _send_telegram(self, notification: TradeNotification, balance_info: Optional[Dict] = None) -> bool:
         """发送到Telegram - 详细版"""
         if not self.telegram_bot_token or not self.telegram_chat_id:
             return False
@@ -344,6 +481,14 @@ class TradeNotifier:
             # 钱包地址缩写
             wallet_short = f"{notification.wallet_address[:6]}...{notification.wallet_address[-4:]}" if notification.wallet_address and len(notification.wallet_address) > 10 else 'N/A'
             
+            # 余额显示
+            balance_text = ""
+            if balance_info and not balance_info.get('error'):
+                native_balance = balance_info.get('native', 0)
+                native_usd = balance_info.get('native_usd', 0)
+                balance_symbol = balance_info.get('symbol', chain['symbol'])
+                balance_text = f"\n💰 *Balance:* `{native_balance:.4f} {balance_symbol}` (~${native_usd:.2f})"
+            
             # 构建详细消息
             text = f"""{status['emoji']} *TRADE EXECUTION - {status['text']}*
 
@@ -372,6 +517,10 @@ class TradeNotifier:
 🔥 *Used:* `{notification.gas_used:.6f} {chain['symbol']}`
 📊 *Price:* `{notification.gas_price_gwei:.2f} Gwei`
 🏪 *DEX:* `{notification.dex}`
+
+━━━━━━ 👛 Wallet ━━━━━━
+
+🔑 *Address:* `{wallet_short}`{balance_text}
 """
             
             # 盈亏信息
@@ -390,7 +539,6 @@ class TradeNotifier:
 
 📊 *Score:* `{notification.signal_score:.0f}/100`
 📡 *Source:* `{notification.signal_source}`
-👛 *Wallet:* `{wallet_short}`
 """
 
             # 交易链接
