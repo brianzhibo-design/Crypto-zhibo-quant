@@ -1,0 +1,71 @@
+# ============================================================
+# Crypto Monitor - 完整监控配置
+# ============================================================
+# 用法: docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+# 添加 cAdvisor + Node Exporter 完整监控
+
+version: '3.8'
+
+services:
+  
+  # ----------------------------------------------------------
+  # cAdvisor - 容器资源监控
+  # ----------------------------------------------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: crypto-cadvisor
+    restart: always
+    privileged: true
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.3'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # ----------------------------------------------------------
+  # Node Exporter - 主机指标
+  # ----------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: crypto-node-exporter
+    restart: always
+    command:
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    ports:
+      - "9100:9100"
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+
+  # ----------------------------------------------------------
+  # 更新 Prometheus 配置
+  # ----------------------------------------------------------
+  prometheus:
+    volumes:
+      - ../deploy/prometheus/prometheus-full.yml:/etc/prometheus/prometheus.yml:ro
+      - ../deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+

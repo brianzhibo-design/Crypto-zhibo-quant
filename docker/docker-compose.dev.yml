@@ -1,0 +1,144 @@
+# ============================================================
+# Crypto Monitor - 本地开发配置
+# ============================================================
+# 用法: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# 总资源占用: ~3GB (适合 8GB RAM 的开发机)
+
+version: '3.8'
+
+services:
+  
+  # ----------------------------------------------------------
+  # Redis - 降低内存
+  # ----------------------------------------------------------
+  redis:
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-dev123}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save ""
+      --appendonly no
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # ----------------------------------------------------------
+  # 采集器 - 降低资源
+  # ----------------------------------------------------------
+  exchange-intl:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.3'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+    environment:
+      - POLL_INTERVAL=30
+
+  exchange-kr:
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.3'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+    environment:
+      - POLL_INTERVAL=30
+
+  blockchain:
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: '0.3'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    environment:
+      - POLL_INTERVAL=30
+
+  telegram:
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: '0.3'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  news:
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+          cpus: '0.2'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+    environment:
+      - POLL_INTERVAL=600
+
+  # ----------------------------------------------------------
+  # 融合引擎 - 降低内存
+  # ----------------------------------------------------------
+  fusion:
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.2'
+
+  pusher:
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+          cpus: '0.2'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+
+  # ----------------------------------------------------------
+  # Dashboard
+  # ----------------------------------------------------------
+  dashboard:
+    # 开发模式使用 Flask 内置服务器
+    command: python -m dashboards.unified.app
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.3'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+
+  # ----------------------------------------------------------
+  # 监控服务 - 本地开发禁用
+  # ----------------------------------------------------------
+  prometheus:
+    profiles: ["monitoring"]
+
+  grafana:
+    profiles: ["monitoring"]
+
+  redis-exporter:
+    profiles: ["monitoring"]
+

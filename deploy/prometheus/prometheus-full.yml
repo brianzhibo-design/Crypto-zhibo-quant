@@ -1,0 +1,53 @@
+# ============================================================
+# Prometheus 完整配置 - 包含所有监控目标
+# ============================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'crypto-monitor'
+    environment: 'production'
+
+rule_files:
+  - 'alerts.yml'
+
+scrape_configs:
+  
+  # Prometheus 自身
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # Redis Exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'
+
+  # cAdvisor - 容器指标
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'cadvisor'
+    metrics_path: /metrics
+
+  # Node Exporter - 主机指标
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'node'
+
+  # 应用健康检查 (通过 blackbox exporter 或直接 HTTP)
+  - job_name: 'dashboard-health'
+    metrics_path: /api/health
+    static_configs:
+      - targets: ['dashboard:5000']
+        labels:
+          service: 'dashboard'
+
