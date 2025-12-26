@@ -1,0 +1,112 @@
+# ============================================================
+# 交易配置 - 自动狙击系统
+# ============================================================
+# ⚠️ 警告: 自动交易有风险，请谨慎配置！
+
+trading:
+  # 是否启用自动交易（谨慎开启！）
+  enabled: false
+  
+  # 模拟模式（不实际交易）
+  dry_run: true
+  
+  # 基础交易金额 (USDT)
+  base_amount: 50
+  
+  # 信号过滤
+  min_signal_score: 85  # 最低信号分数
+  
+  # 白名单链
+  allowed_chains:
+    - ethereum
+    - bsc
+    - base
+    - arbitrum
+  
+  # 滑点设置
+  slippage: 0.01  # 1%
+  
+  # 止损止盈
+  stop_loss: -0.10  # -10%
+  
+  take_profit:
+    - ratio: 0.5   # 盈利 50%
+      sell: 0.3    # 卖出 30%
+    - ratio: 1.0   # 盈利 100%
+      sell: 0.5    # 再卖 50%
+    - ratio: 2.0   # 盈利 200%
+      sell: 1.0    # 全部卖出
+
+# ============================================================
+# 安全检查配置
+# ============================================================
+safety:
+  # 最低流动性 (USD)
+  min_liquidity: 50000
+  
+  # 最大买入税 (%)
+  max_buy_tax: 10
+  
+  # 最大卖出税 (%)
+  max_sell_tax: 10
+  
+  # 是否要求合约已验证
+  require_verified: false
+  
+  # 蜜罐检测
+  honeypot_detection: true
+  
+  # 多 API 验证
+  multi_api_check: true
+
+# ============================================================
+# Gas 设置
+# ============================================================
+gas:
+  # 优先级: low, medium, high, aggressive
+  priority: medium
+  
+  # 最大 Gas Price (Gwei)
+  max_gas_price: 100
+  
+  # Gas 加价比例（Front-run 时）
+  frontrun_multiplier: 1.2
+
+# ============================================================
+# DEX 配置
+# ============================================================
+dex:
+  ethereum:
+    - name: uniswap_v3
+      router: "0xE592427A0AEce92De3Edee1F18E0157C05861564"
+      priority: 1
+    - name: uniswap_v2
+      router: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"
+      priority: 2
+  
+  bsc:
+    - name: pancakeswap_v3
+      router: "0x13f4EA83D0bd40E75C8222255bc855a974568Dd4"
+      priority: 1
+    - name: pancakeswap_v2
+      router: "0x10ED43C718714eb63d5aA57B78B54704E256024E"
+      priority: 2
+  
+  base:
+    - name: uniswap_v3
+      router: "0x2626664c2603336E57B271c5C0b26F421741e481"
+      priority: 1
+
+# ============================================================
+# 通知设置
+# ============================================================
+notifications:
+  # 交易通知
+  trade_alerts: true
+  
+  # 止损止盈通知
+  exit_alerts: true
+  
+  # 错误通知
+  error_alerts: true
+
