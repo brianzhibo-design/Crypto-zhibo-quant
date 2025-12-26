@@ -27,14 +27,15 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-# 功能模块配置 - 仅使用新的功能性键名
+# 功能模块配置 - 按功能划分
 NODES = {
-    'FUSION': {'name': 'Fusion Engine', 'icon': 'cpu', 'role': 'Core'},
-    'EXCHANGE': {'name': 'Exchange Link', 'icon': 'layers', 'role': 'CEX'},
-    'BLOCKCHAIN': {'name': 'Chain Monitor', 'icon': 'activity', 'role': 'On-chain'},
-    'SOCIAL': {'name': 'Social Feed', 'icon': 'message-circle', 'role': 'Social'},
-    'TELEGRAM': {'name': 'Telegram Stream', 'icon': 'send', 'role': 'TG'},
-    'PUSHER': {'name': 'Alert Pusher', 'icon': 'bell', 'role': 'Push'},
+    'exchange_intl': {'name': 'Exchange (Intl)', 'icon': 'layers', 'role': 'CEX'},
+    'exchange_kr': {'name': 'Exchange (KR)', 'icon': 'globe', 'role': 'CEX'},
+    'blockchain': {'name': 'Blockchain', 'icon': 'activity', 'role': 'On-chain'},
+    'telegram': {'name': 'Telegram', 'icon': 'send', 'role': 'TG'},
+    'news': {'name': 'News RSS', 'icon': 'newspaper', 'role': 'News'},
+    'fusion': {'name': 'Fusion Engine', 'icon': 'cpu', 'role': 'Core'},
+    'pusher': {'name': 'Pusher', 'icon': 'bell', 'role': 'Push'},
 }
 
 EXCHANGES = ['binance', 'okx', 'bybit', 'kucoin', 'gate', 'bitget', 'upbit', 'bithumb', 'coinbase', 'kraken', 'mexc', 'htx']

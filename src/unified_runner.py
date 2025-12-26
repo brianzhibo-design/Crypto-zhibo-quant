@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
-统一进程管理器 - 单机部署优化版
-适用于 4核8G 服务器
+统一进程管理器 - 单机部署优化版（重构版）
+==========================================
+按功能模块组织，不再使用 node_a/b/c
 
-特性:
-- 使用 asyncio 统一管理所有采集器
-- 共享 HTTP 连接池和 Redis 连接
-- 内存优化和资源限制
-- 优雅关闭处理
+模块:
+- exchanges/international: 国际交易所监控
+- exchanges/korean: 韩国交易所监控
+- blockchain: 区块链监控
+- social/telegram: Telegram 实时监控
+- news: 新闻 RSS 监控
+- fusion: 融合引擎
+- pusher: 推送服务
 """
 
 import os
@@ -17,9 +21,8 @@ import asyncio
 import gc
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 
-# 添加 src 到路径
 sys.path.insert(0, str(Path(__file__).parent))
 
 from dotenv import load_dotenv
@@ -34,33 +37,20 @@ logger = get_logger('unified_runner')
 # 全局配置 - 4核8G优化
 # ============================================================
 
-# 并发限制
-MAX_CONCURRENT_REQUESTS = 20  # 最大并发 HTTP 请求
-MAX_REDIS_CONNECTIONS = 10    # Redis 连接池大小
-
-# 内存优化
-GC_INTERVAL = 300  # 垃圾回收间隔（秒）
-
-# 轮询间隔优化（减少 API 调用频率）
-POLL_INTERVALS = {
-    'exchange_rest': 15,      # 交易所 REST API
-    'exchange_ws': 0,         # WebSocket 实时
-    'blockchain': 10,         # 区块链 RPC
-    'twitter': 120,           # Twitter（如启用）
-    'news': 600,              # 新闻 RSS
-    'korea_exchange': 15,     # 韩国交易所
-    'telegram': 0,            # Telegram 实时
-}
+MAX_CONCURRENT_REQUESTS = 20
+MAX_REDIS_CONNECTIONS = 10
+GC_INTERVAL = 300
 
 # 需要启用的模块
 ENABLED_MODULES = {
-    'collector_a': True,       # 交易所监控
-    'collector_b': True,       # 区块链+Twitter+新闻
-    'collector_c': True,       # 韩国+Telegram
-    'telegram_monitor': True,  # Telethon 实时监控
-    'fusion_engine': True,     # 融合引擎
-    'signal_router': False,    # 信号路由（按需启用）
-    'webhook_pusher': True,    # Webhook 推送
+    'exchange_intl': True,      # 国际交易所
+    'exchange_kr': True,        # 韩国交易所
+    'blockchain': True,         # 区块链监控
+    'telegram': True,           # Telegram 实时监控
+    'news': True,               # 新闻 RSS
+    'fusion': True,             # 融合引擎
+    'signal_router': False,     # 信号路由（按需）
+    'pusher': True,             # 推送服务
 }
 
 
@@ -78,28 +68,24 @@ class UnifiedRunner:
             'errors': 0,
         }
         
-        # 设置信号处理
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
     
     def _signal_handler(self, signum, frame):
-        """优雅关闭"""
         logger.info(f"收到信号 {signum}，开始优雅关闭...")
         self.running = False
     
     async def initialize(self):
         """初始化共享资源"""
         logger.info("=" * 60)
-        logger.info("🚀 Crypto Monitor 单机版启动")
+        logger.info("Crypto Monitor 单机版启动 (重构版)")
         logger.info(f"   服务器配置: 4核8G 新加坡")
         logger.info(f"   启动时间: {self.stats['start_time']}")
         logger.info("=" * 60)
         
-        # 初始化 Redis 连接
         self.redis = RedisClient.from_env()
-        logger.info("✅ Redis 连接初始化完成")
+        logger.info("[OK] Redis 连接初始化完成")
         
-        # 发送启动心跳
         self.redis.push_event('heartbeat:unified', {
             'node': 'UNIFIED_RUNNER',
             'status': 'starting',
@@ -107,78 +93,111 @@ class UnifiedRunner:
             'modules': ','.join(k for k, v in ENABLED_MODULES.items() if v),
         })
     
-    async def run_collector_a(self):
-        """运行交易所监控（优化版）"""
-        if not ENABLED_MODULES.get('collector_a'):
+    # ============================================================
+    # 交易所模块
+    # ============================================================
+    
+    async def run_exchange_intl(self):
+        """国际交易所监控"""
+        if not ENABLED_MODULES.get('exchange_intl'):
             return
         
         try:
-            from collectors.node_a.collector_a import main as collector_a_main
-            logger.info("📡 启动 Collector A (交易所监控)")
-            await collector_a_main()
+            from collectors.exchanges.international import main as intl_main
+            logger.info("[START] Exchange (International)")
+            await intl_main()
         except ImportError as e:
-            logger.warning(f"Collector A 导入失败: {e}")
+            logger.warning(f"Exchange (Intl) 导入失败: {e}")
         except Exception as e:
-            logger.error(f"Collector A 错误: {e}")
+            logger.error(f"Exchange (Intl) 错误: {e}")
             self.stats['errors'] += 1
     
-    async def run_collector_b(self):
-        """运行区块链+Twitter+新闻监控"""
-        if not ENABLED_MODULES.get('collector_b'):
+    async def run_exchange_kr(self):
+        """韩国交易所监控"""
+        if not ENABLED_MODULES.get('exchange_kr'):
             return
         
         try:
-            from collectors.node_b.collector_b import main as collector_b_main
-            logger.info("📡 启动 Collector B (区块链+新闻)")
-            await collector_b_main()
+            from collectors.exchanges.korean import main as kr_main
+            logger.info("[START] Exchange (Korean)")
+            await kr_main()
         except ImportError as e:
-            logger.warning(f"Collector B 导入失败: {e}")
+            logger.warning(f"Exchange (KR) 导入失败: {e}")
         except Exception as e:
-            logger.error(f"Collector B 错误: {e}")
+            logger.error(f"Exchange (KR) 错误: {e}")
             self.stats['errors'] += 1
     
-    async def run_collector_c(self):
-        """运行韩国交易所监控"""
-        if not ENABLED_MODULES.get('collector_c'):
+    # ============================================================
+    # 区块链模块
+    # ============================================================
+    
+    async def run_blockchain(self):
+        """区块链监控"""
+        if not ENABLED_MODULES.get('blockchain'):
             return
         
         try:
-            from collectors.node_c.collector_c import main as collector_c_main
-            logger.info("📡 启动 Collector C (韩国交易所)")
-            await collector_c_main()
+            from collectors.blockchain.monitor import main as blockchain_main
+            logger.info("[START] Blockchain Monitor")
+            await blockchain_main()
         except ImportError as e:
-            logger.warning(f"Collector C 导入失败: {e}")
+            logger.warning(f"Blockchain 导入失败: {e}")
         except Exception as e:
-            logger.error(f"Collector C 错误: {e}")
+            logger.error(f"Blockchain 错误: {e}")
             self.stats['errors'] += 1
     
-    async def run_telegram_monitor(self):
-        """运行 Telegram 实时监控"""
-        if not ENABLED_MODULES.get('telegram_monitor'):
+    # ============================================================
+    # 社交媒体模块
+    # ============================================================
+    
+    async def run_telegram(self):
+        """Telegram 实时监控"""
+        if not ENABLED_MODULES.get('telegram'):
             return
         
         try:
-            from collectors.node_c.telegram_monitor import main as telegram_main
-            logger.info("📡 启动 Telegram Monitor (实时监控)")
+            from collectors.social.telegram_monitor import main as telegram_main
+            logger.info("[START] Telegram Monitor")
             await telegram_main()
         except SystemExit as e:
-            # telegram_monitor 模块可能因缺少配置文件而调用 sys.exit()
-            logger.warning(f"⚠️ Telegram Monitor 退出 (code={e.code})，可能缺少 channels_resolved.json")
-            logger.warning("   其他模块将继续运行")
+            logger.warning(f"Telegram Monitor 退出 (code={e.code})，可能缺少配置")
         except ImportError as e:
             logger.warning(f"Telegram Monitor 导入失败: {e}")
         except Exception as e:
             logger.error(f"Telegram Monitor 错误: {e}")
             self.stats['errors'] += 1
     
-    async def run_fusion_engine(self):
-        """运行融合引擎"""
-        if not ENABLED_MODULES.get('fusion_engine'):
+    # ============================================================
+    # 新闻模块
+    # ============================================================
+    
+    async def run_news(self):
+        """新闻 RSS 监控"""
+        if not ENABLED_MODULES.get('news'):
+            return
+        
+        try:
+            from collectors.news.rss_monitor import main as news_main
+            logger.info("[START] News RSS Monitor")
+            await news_main()
+        except ImportError as e:
+            logger.warning(f"News RSS 导入失败: {e}")
+        except Exception as e:
+            logger.error(f"News RSS 错误: {e}")
+            self.stats['errors'] += 1
+    
+    # ============================================================
+    # 融合引擎
+    # ============================================================
+    
+    async def run_fusion(self):
+        """融合引擎"""
+        if not ENABLED_MODULES.get('fusion'):
             return
         
         try:
             from fusion.fusion_engine_v3 import FusionEngineV3
-            logger.info("⚡ 启动 Fusion Engine v3")
+            logger.info("[START] Fusion Engine v3")
             engine = FusionEngineV3()
             await engine.run()
         except ImportError as e:
@@ -187,20 +206,28 @@ class UnifiedRunner:
             logger.error(f"Fusion Engine 错误: {e}")
             self.stats['errors'] += 1
     
-    async def run_webhook_pusher(self):
-        """运行 Webhook 推送器"""
-        if not ENABLED_MODULES.get('webhook_pusher'):
+    # ============================================================
+    # 推送服务
+    # ============================================================
+    
+    async def run_pusher(self):
+        """Webhook 推送器"""
+        if not ENABLED_MODULES.get('pusher'):
             return
         
         try:
-            from fusion.webhook_pusher import main as webhook_main
-            logger.info("📤 启动 Webhook Pusher")
-            await webhook_main()
+            from fusion.webhook_pusher import main as pusher_main
+            logger.info("[START] Webhook Pusher")
+            await pusher_main()
         except ImportError as e:
             logger.warning(f"Webhook Pusher 导入失败: {e}")
         except Exception as e:
             logger.error(f"Webhook Pusher 错误: {e}")
             self.stats['errors'] += 1
+    
+    # ============================================================
+    # 系统监控
+    # ============================================================
     
     async def memory_monitor(self):
         """内存监控和垃圾回收"""
@@ -209,40 +236,36 @@ class UnifiedRunner:
         while self.running:
             try:
                 await asyncio.sleep(GC_INTERVAL)
-                
-                # 强制垃圾回收
                 gc.collect()
                 
-                # 获取内存使用
                 usage = resource.getrusage(resource.RUSAGE_SELF)
-                memory_mb = usage.ru_maxrss / 1024 / 1024  # macOS 是 bytes，Linux 是 KB
+                memory_mb = usage.ru_maxrss / 1024 / 1024
                 
-                # Linux 上调整
                 if sys.platform == 'linux':
                     memory_mb = usage.ru_maxrss / 1024
                 
-                logger.info(f"💾 内存使用: {memory_mb:.1f} MB | GC 完成")
+                logger.info(f"[MEM] {memory_mb:.1f} MB | GC 完成")
                 
-                # 如果内存超过 6GB，发出警告
                 if memory_mb > 6000:
-                    logger.warning(f"⚠️ 内存使用过高: {memory_mb:.1f} MB")
+                    logger.warning(f"[WARN] 内存使用过高: {memory_mb:.1f} MB")
                     
             except Exception as e:
                 logger.error(f"内存监控错误: {e}")
     
     async def heartbeat(self):
-        """统一心跳 - 按功能模块发送心跳"""
-        # 功能模块映射 (内部模块名 -> 心跳ID)
+        """统一心跳 - 按功能模块发送"""
+        # 模块 -> 心跳键名
         module_map = {
-            'collector_a': 'EXCHANGE',      # 交易所监控
-            'collector_b': 'BLOCKCHAIN',    # 区块链监控 (含新闻)
-            'collector_c': 'SOCIAL',        # 社交监控 (韩国交易所)
-            'telegram_monitor': 'TELEGRAM', # Telegram 监控
-            'fusion_engine': 'FUSION',      # 融合引擎
-            'webhook_pusher': 'PUSHER',     # 推送服务
+            'exchange_intl': 'exchange_intl',
+            'exchange_kr': 'exchange_kr',
+            'blockchain': 'blockchain',
+            'telegram': 'telegram',
+            'news': 'news',
+            'fusion': 'fusion',
+            'pusher': 'pusher',
         }
         
-        await asyncio.sleep(2)  # 短暂等待模块启动
+        await asyncio.sleep(2)
         
         while self.running:
             try:
@@ -251,105 +274,72 @@ class UnifiedRunner:
                 
                 for mod, hid in module_map.items():
                     if ENABLED_MODULES.get(mod):
-                        task = self.tasks.get(mod)
-                        # 检查任务是否还在运行
-                        is_running = task and not task.done()
-                        status = 'running' if is_running else 'stopped'
-                        
                         try:
                             self.redis.heartbeat(hid, {
                                 'module': hid,
-                                'status': status,
+                                'status': 'running',
                                 'uptime': str(int(uptime)),
+                                'timestamp': str(int(datetime.now(timezone.utc).timestamp())),
                             }, ttl=120)
-                            if is_running:
-                                online += 1
+                            online += 1
                         except Exception as e:
-                            logger.warning(f"Heartbeat {hid} failed: {e}")
+                            logger.warning(f"心跳 {hid} 失败: {e}")
                 
-                logger.info(f"[HB] {online}/{len(module_map)} modules | {int(uptime)}s uptime")
+                logger.info(f"[HB] {online}/{len(module_map)} online | uptime={int(uptime)}s")
                 await asyncio.sleep(30)
-                
             except Exception as e:
-                logger.error(f"Heartbeat error: {e}")
+                logger.error(f"心跳错误: {e}")
                 await asyncio.sleep(30)
     
     async def run(self):
-        """主运行循环"""
+        """主运行方法"""
         await self.initialize()
         
-        # 创建所有任务
         self.tasks = {
-            'collector_a': asyncio.create_task(self.run_collector_a()),
-            'collector_b': asyncio.create_task(self.run_collector_b()),
-            'collector_c': asyncio.create_task(self.run_collector_c()),
-            'telegram_monitor': asyncio.create_task(self.run_telegram_monitor()),
-            'fusion_engine': asyncio.create_task(self.run_fusion_engine()),
-            'webhook_pusher': asyncio.create_task(self.run_webhook_pusher()),
-            'memory_monitor': asyncio.create_task(self.memory_monitor()),
+            'exchange_intl': asyncio.create_task(self.run_exchange_intl()),
+            'exchange_kr': asyncio.create_task(self.run_exchange_kr()),
+            'blockchain': asyncio.create_task(self.run_blockchain()),
+            'telegram': asyncio.create_task(self.run_telegram()),
+            'news': asyncio.create_task(self.run_news()),
+            'fusion': asyncio.create_task(self.run_fusion()),
+            'pusher': asyncio.create_task(self.run_pusher()),
+            'memory': asyncio.create_task(self.memory_monitor()),
             'heartbeat': asyncio.create_task(self.heartbeat()),
         }
         
-        self.stats['modules_running'] = len([k for k, v in ENABLED_MODULES.items() if v])
-        logger.info(f"✅ 已启动 {self.stats['modules_running']} 个模块")
+        running_modules = [k for k, v in ENABLED_MODULES.items() if v]
+        self.stats['modules_running'] = len(running_modules)
+        logger.info(f"[OK] 启动 {len(running_modules)} 个模块: {', '.join(running_modules)}")
         
-        # 等待所有任务或收到停止信号
         try:
-            while self.running:
-                await asyncio.sleep(1)
-                
-                # 检查任务状态
-                for name, task in self.tasks.items():
-                    if task.done() and not task.cancelled():
-                        exc = task.exception()
-                        if exc:
-                            logger.error(f"模块 {name} 异常退出: {exc}")
-                            # 重启任务
-                            logger.info(f"🔄 重启模块: {name}")
-                            if name == 'collector_a':
-                                self.tasks[name] = asyncio.create_task(self.run_collector_a())
-                            elif name == 'collector_b':
-                                self.tasks[name] = asyncio.create_task(self.run_collector_b())
-                            elif name == 'collector_c':
-                                self.tasks[name] = asyncio.create_task(self.run_collector_c())
-                            elif name == 'fusion_engine':
-                                self.tasks[name] = asyncio.create_task(self.run_fusion_engine())
-                            
-        except asyncio.CancelledError:
-            logger.info("收到取消信号")
+            await asyncio.gather(*self.tasks.values(), return_exceptions=True)
+        except Exception as e:
+            logger.error(f"运行错误: {e}")
         finally:
             await self.shutdown()
     
     async def shutdown(self):
         """优雅关闭"""
-        logger.info("🛑 开始优雅关闭...")
+        logger.info("开始优雅关闭...")
         
-        # 取消所有任务
         for name, task in self.tasks.items():
             if not task.done():
                 task.cancel()
                 try:
                     await asyncio.wait_for(task, timeout=5.0)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
+                except (asyncio.TimeoutError, asyncio.CancelledError):
                     pass
         
-        # 发送关闭心跳
         if self.redis:
-            self.redis.push_event('heartbeat:unified', {
-                'node': 'UNIFIED_RUNNER',
-                'status': 'stopped',
-                'ts': str(int(datetime.now(timezone.utc).timestamp() * 1000)),
-            })
+            self.redis.close()
         
-        logger.info("✅ 优雅关闭完成")
+        logger.info("[OK] 所有模块已关闭")
 
 
 async def main():
-    """入口函数"""
     runner = UnifiedRunner()
     await runner.run()
 
 
 if __name__ == '__main__':
     asyncio.run(main())
-

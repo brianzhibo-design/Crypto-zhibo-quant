@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Node A Collector v2 - Exchange Monitor (Full Version)
-=====================================================
-支持 14 家交易所的新币检测：
+International Exchange Monitor
+==============================
+监控国际主流交易所的新币上线：
 - Tier 1: Binance, Coinbase, Kraken
 - Tier 2: OKX, Bybit, KuCoin  
 - Tier 3: Gate, Bitget, HTX, MEXC, Crypto.com, Bitmart, LBank, Poloniex
@@ -10,8 +10,7 @@ Node A Collector v2 - Exchange Monitor (Full Version)
 功能：
 - REST API 市场列表新币检测
 - WebSocket 实时监控（Binance）
-- 完整异常处理和日志
-- 自动重连机制
+- 完整异常处理和自动重连
 """
 import asyncio
 import threading
@@ -30,7 +29,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from core.logging import get_logger
 from core.redis_client import RedisClient
 
-# YAML 为可选依赖
 try:
     import yaml
     HAS_YAML = True
@@ -38,12 +36,15 @@ except ImportError:
     HAS_YAML = False
 
 CONFIG_FILE = Path(__file__).parent / 'config.yaml'
-logger = get_logger('collector_a')
+logger = get_logger('exchange_intl')
 
 redis_client = None
 config = None
 running = True
 stats = {'scans': 0, 'events': 0, 'errors': 0, 'ws_reconnects': 0}
+
+# 心跳键名
+HEARTBEAT_KEY = 'exchange_intl'
 
 # 交易所解析器配置
 EXCHANGE_PARSERS = {
@@ -99,7 +100,7 @@ EXCHANGE_PARSERS = {
     },
     'kraken': {
         'path': lambda d: list(d.get('result', {}).keys()) if 'result' in d else [],
-        'symbol_key': None,  # keys are symbols
+        'symbol_key': None,
         'filter': lambda item: True
     },
     'cryptocom': {
@@ -114,7 +115,7 @@ EXCHANGE_PARSERS = {
     },
     'lbank': {
         'path': lambda d: d.get('data', []) if isinstance(d.get('data'), list) else [],
-        'symbol_key': None,  # items are strings
+        'symbol_key': None,
         'filter': lambda item: True
     },
     'poloniex': {
@@ -124,40 +125,43 @@ EXCHANGE_PARSERS = {
     }
 }
 
+# 默认交易所配置（如果没有 config.yaml）
+DEFAULT_EXCHANGES = [
+    {'name': 'binance', 'rest': 'https://api.binance.com/api/v3/exchangeInfo', 
+     'websocket': 'wss://stream.binance.com:9443/ws/!ticker@arr', 'enabled': True},
+    {'name': 'okx', 'rest': 'https://www.okx.com/api/v5/public/instruments?instType=SPOT', 'enabled': True},
+    {'name': 'bybit', 'rest': 'https://api.bybit.com/v5/market/instruments-info?category=spot', 'enabled': True},
+    {'name': 'kucoin', 'rest': 'https://api.kucoin.com/api/v1/symbols', 'enabled': True},
+    {'name': 'gate', 'rest': 'https://api.gateio.ws/api/v4/spot/currency_pairs', 'enabled': True},
+    {'name': 'bitget', 'rest': 'https://api.bitget.com/api/spot/v1/public/products', 'enabled': True},
+    {'name': 'htx', 'rest': 'https://api.huobi.pro/v1/common/symbols', 'enabled': True},
+    {'name': 'mexc', 'rest': 'https://api.mexc.com/api/v3/exchangeInfo', 'enabled': True},
+    {'name': 'coinbase', 'rest': 'https://api.exchange.coinbase.com/products', 'enabled': True},
+    {'name': 'kraken', 'rest': 'https://api.kraken.com/0/public/AssetPairs', 'enabled': True},
+]
+
+
 def load_config():
-    """加载配置（支持环境变量覆盖）"""
+    """加载配置"""
     global config
-    config = {}
+    config = {'exchanges': DEFAULT_EXCHANGES, 'rest_poll_interval': 15, 'websocket_reconnect_interval': 5}
     
     if HAS_YAML and CONFIG_FILE.exists():
-        with open(CONFIG_FILE, 'r') as f:
-            config = yaml.safe_load(f) or {}
-    
-    # 从环境变量覆盖 Redis 配置
-    if 'redis' not in config:
-        config['redis'] = {}
-    config['redis']['host'] = os.getenv('REDIS_HOST', config['redis'].get('host', '127.0.0.1'))
-    config['redis']['port'] = int(os.getenv('REDIS_PORT', config['redis'].get('port', 6379)))
-    config['redis']['password'] = os.getenv('REDIS_PASSWORD', config['redis'].get('password'))
-    
-    # 确保 exchanges 列表存在
-    if 'exchanges' not in config:
-        config['exchanges'] = []
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                loaded = yaml.safe_load(f) or {}
+                config.update(loaded)
+        except Exception as e:
+            logger.warning(f"配置文件加载失败，使用默认配置: {e}")
     
     logger.info(f"配置加载成功：{len(config.get('exchanges', []))} 个交易所")
+
 
 def parse_symbols(exchange_name: str, data: dict) -> list:
     """统一的交易对解析函数"""
     parser = EXCHANGE_PARSERS.get(exchange_name)
     if not parser:
-        logger.warning(f"未知交易所: {exchange_name}，尝试通用解析")
-        # 通用解析尝试
-        if isinstance(data, list):
-            return [item.get('symbol', item.get('id', '')) for item in data if isinstance(item, dict)]
-        elif 'data' in data:
-            return [item.get('symbol', '') for item in data.get('data', []) if isinstance(item, dict)]
-        elif 'symbols' in data:
-            return [item.get('symbol', '') for item in data.get('symbols', []) if isinstance(item, dict)]
+        logger.warning(f"未知交易所: {exchange_name}")
         return []
     
     try:
@@ -165,19 +169,15 @@ def parse_symbols(exchange_name: str, data: dict) -> list:
         symbols = []
         
         for item in items:
-            # 检查过滤条件
             if not parser['filter'](item):
                 continue
             
-            # 获取symbol
             if parser['symbol_key'] is None:
-                # item本身就是symbol（如kraken的keys，lbank的strings）
                 symbol = item if isinstance(item, str) else ''
             else:
                 symbol = item.get(parser['symbol_key'], '') if isinstance(item, dict) else ''
             
             if symbol:
-                # 应用 transform（如 upper()）
                 if parser.get('transform'):
                     symbol = parser['transform'](symbol)
                 symbols.append(symbol)
@@ -187,11 +187,11 @@ def parse_symbols(exchange_name: str, data: dict) -> list:
         logger.error(f"解析 {exchange_name} 数据失败: {e}")
         return []
 
+
 async def monitor_binance_ws(exchange_config):
     """Binance WebSocket 监控"""
     url = exchange_config.get('websocket')
     if not url:
-        logger.warning("Binance WebSocket URL 未配置")
         return
     
     exchange_name = 'binance'
@@ -200,20 +200,19 @@ async def monitor_binance_ws(exchange_config):
         try:
             logger.info(f"连接 {exchange_name} WebSocket...")
             async with websockets.connect(url, ping_interval=20, ping_timeout=10) as ws:
-                logger.info(f"✅ {exchange_name} WebSocket已连接")
+                logger.info(f"[OK] {exchange_name} WebSocket 已连接")
                 
                 while running:
                     try:
                         msg = await asyncio.wait_for(ws.recv(), timeout=30)
                         data = json.loads(msg)
                         
-                        # 处理 ticker 数据
                         tickers = data if isinstance(data, list) else [data]
                         
                         for ticker in tickers:
                             symbol = ticker.get('s', '')
                             if symbol and not redis_client.check_known_pair(exchange_name, symbol):
-                                logger.info(f"🆕 WS发现新币种: {symbol} @ {exchange_name}")
+                                logger.info(f"[NEW] WS发现新币: {symbol} @ {exchange_name}")
                                 
                                 event = {
                                     'source': 'ws_market',
@@ -221,7 +220,6 @@ async def monitor_binance_ws(exchange_config):
                                     'exchange': exchange_name,
                                     'symbol': symbol,
                                     'raw_text': f"New trading pair: {symbol}",
-                                    'url': exchange_config.get('announcement_url', ''),
                                     'detected_at': str(int(datetime.now(timezone.utc).timestamp() * 1000))
                                 }
                                 
@@ -232,26 +230,26 @@ async def monitor_binance_ws(exchange_config):
                         stats['scans'] += 1
                     
                     except asyncio.TimeoutError:
-                        # 发送ping保持连接
                         try:
                             await ws.ping()
                         except:
                             break
                     except websockets.exceptions.ConnectionClosed:
-                        logger.warning(f"{exchange_name} WS连接关闭")
+                        logger.warning(f"{exchange_name} WS 连接关闭")
                         break
                     except Exception as e:
-                        logger.error(f"{exchange_name} WS处理错误: {type(e).__name__}: {e}")
+                        logger.error(f"{exchange_name} WS 错误: {e}")
                         stats['errors'] += 1
                         break
         
         except Exception as e:
-            logger.error(f"{exchange_name} WS连接失败: {type(e).__name__}: {e}")
+            logger.error(f"{exchange_name} WS 连接失败: {e}")
             stats['ws_reconnects'] += 1
             stats['errors'] += 1
         
         if running:
             await asyncio.sleep(config.get('websocket_reconnect_interval', 5))
+
 
 async def monitor_exchange_rest(exchange_config):
     """通用 REST API 监控"""
@@ -259,14 +257,12 @@ async def monitor_exchange_rest(exchange_config):
     rest_url = exchange_config.get('rest')
     
     if not rest_url:
-        logger.warning(f"{exchange_name} REST URL 未配置，跳过")
         return
     
-    poll_interval = config.get('rest_poll_interval', 10)
+    poll_interval = config.get('rest_poll_interval', 15)
     
-    logger.info(f"启动 {exchange_name} 监控（REST模式，间隔 {poll_interval}s）")
+    logger.info(f"启动 {exchange_name} 监控 (REST, {poll_interval}s)")
     
-    # 添加请求头避免被封
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'application/json'
@@ -285,7 +281,7 @@ async def monitor_exchange_rest(exchange_config):
                         new_count = 0
                         for symbol in symbols:
                             if symbol and not redis_client.check_known_pair(exchange_name, symbol):
-                                logger.info(f"🆕 发现新币种: {symbol} @ {exchange_name}")
+                                logger.info(f"[NEW] {symbol} @ {exchange_name}")
                                 
                                 event = {
                                     'source': 'rest_api',
@@ -293,7 +289,6 @@ async def monitor_exchange_rest(exchange_config):
                                     'exchange': exchange_name,
                                     'symbol': symbol,
                                     'raw_text': f"New trading pair: {symbol}",
-                                    'url': exchange_config.get('announcement_url', ''),
                                     'detected_at': str(int(datetime.now(timezone.utc).timestamp() * 1000))
                                 }
                                 
@@ -303,94 +298,72 @@ async def monitor_exchange_rest(exchange_config):
                                 new_count += 1
                         
                         if new_count > 0:
-                            logger.info(f"📊 {exchange_name}: 发现 {new_count} 个新币种")
+                            logger.info(f"[STAT] {exchange_name}: {new_count} 新币")
                         
                         stats['scans'] += 1
                     
-                    elif resp.status == 403:
-                        logger.warning(f"{exchange_name} REST API 被拒绝 (403)，可能需要代理")
-                        stats['errors'] += 1
                     elif resp.status == 429:
-                        logger.warning(f"{exchange_name} REST API 限流 (429)，等待60秒")
+                        logger.warning(f"{exchange_name} 限流，等待60s")
                         await asyncio.sleep(60)
                         stats['errors'] += 1
-                    elif resp.status == 451:
-                        logger.warning(f"{exchange_name} REST API 地区限制 (451)")
-                        stats['errors'] += 1
                     else:
-                        logger.warning(f"{exchange_name} REST API返回: {resp.status}")
+                        logger.warning(f"{exchange_name} HTTP {resp.status}")
                         stats['errors'] += 1
             
             except asyncio.TimeoutError:
-                logger.warning(f"{exchange_name} 请求超时")
-                stats['errors'] += 1
-            except aiohttp.ClientError as e:
-                logger.error(f"{exchange_name} 网络错误: {type(e).__name__}: {e}")
-                stats['errors'] += 1
-            except json.JSONDecodeError as e:
-                logger.error(f"{exchange_name} JSON解析错误: {e}")
+                logger.warning(f"{exchange_name} 超时")
                 stats['errors'] += 1
             except Exception as e:
-                logger.error(f"{exchange_name} 未知错误: {type(e).__name__}: {e}")
+                logger.error(f"{exchange_name} 错误: {e}")
                 stats['errors'] += 1
             
             await asyncio.sleep(poll_interval)
 
+
+async def heartbeat_loop():
+    """心跳循环"""
+    while running:
+        try:
+            heartbeat_data = {
+                'module': HEARTBEAT_KEY,
+                'status': 'running',
+                'timestamp': str(int(time.time())),
+                'stats': json.dumps(stats)
+            }
+            redis_client.heartbeat(HEARTBEAT_KEY, heartbeat_data, ttl=120)
+            logger.debug(f"[HB] scans={stats['scans']} events={stats['events']}")
+        except Exception as e:
+            logger.error(f"心跳失败: {e}")
+        await asyncio.sleep(30)
+
+
 async def main():
     global redis_client, running
     
-    logger.info("=" * 60)
-    logger.info("Node A Collector v2 启动")
-    logger.info("=" * 60)
+    logger.info("=" * 50)
+    logger.info("International Exchange Monitor 启动")
+    logger.info("=" * 50)
     
     load_config()
     
-    # 连接 Redis（从环境变量读取配置）
     redis_client = RedisClient.from_env()
-    logger.info("✅ Redis连接成功")
+    logger.info("[OK] Redis 已连接")
     
-    # 启动心跳线程
-    def heartbeat_worker():
-        while running:
-            try:
-                heartbeat_data = {
-                    'module': 'EXCHANGE',
-                    'status': 'running',
-                    'timestamp': str(int(time.time())),
-                    'stats': json.dumps(stats)
-                }
-                redis_client.heartbeat('EXCHANGE', heartbeat_data, ttl=120)
-                logger.info(f"💓 心跳发送成功")
-                logger.debug(f"📊 统计: scans={stats['scans']} events={stats['events']} errors={stats['errors']}")
-            except Exception as e:
-                logger.error(f"心跳失败: {e}")
-            time.sleep(30)
+    tasks = [asyncio.create_task(heartbeat_loop())]
     
-    heartbeat_thread = threading.Thread(target=heartbeat_worker, daemon=True)
-    heartbeat_thread.start()
-    logger.info("✅ 心跳线程已启动")
-    
-    tasks = []
-    
-    # 启动所有交易所监控
     for ex in config['exchanges']:
         if not ex.get('enabled', True):
-            logger.info(f"跳过禁用的交易所: {ex['name']}")
             continue
         
         exchange_name = ex['name']
         
-        # Binance 额外启动 WebSocket
         if exchange_name == 'binance' and ex.get('websocket'):
             tasks.append(asyncio.create_task(monitor_binance_ws(ex)))
-            logger.info(f"启动 {exchange_name} 监控（WebSocket模式）")
         
-        # 所有交易所都启动 REST 监控
         if ex.get('rest'):
             tasks.append(asyncio.create_task(monitor_exchange_rest(ex)))
-            logger.info(f"启动 {exchange_name} 监控（REST模式）")
     
-    logger.info(f"✅ 共启动 {len(tasks)} 个监控任务")
+    logger.info(f"[OK] 共启动 {len(tasks)} 个监控任务")
     
     try:
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -400,14 +373,17 @@ async def main():
         running = False
         if redis_client:
             redis_client.close()
-        logger.info("Node A Collector v2 已停止")
+        logger.info("International Exchange Monitor 已停止")
+
 
 def signal_handler(sig, frame):
     global running
     logger.info("收到停止信号...")
     running = False
 
+
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     asyncio.run(main())
+
