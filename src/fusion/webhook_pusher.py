@@ -198,13 +198,13 @@ async def heartbeat_loop():
     while running:
         try:
             heartbeat_data = {
-                'node': 'WEBHOOK',
-                'status': 'online',
+                'module': 'PUSHER',
+                'status': 'running',
                 'timestamp': int(datetime.now(timezone.utc).timestamp()),
                 'stats': json.dumps(stats)
             }
             
-            redis_client.heartbeat('WEBHOOK', heartbeat_data, ttl=120)  # 2分钟过期
+            redis_client.heartbeat('PUSHER', heartbeat_data, ttl=120)
             
         except Exception as e:
             logger.error(f"心跳上报失败: {e}")

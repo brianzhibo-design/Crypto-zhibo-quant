@@ -27,14 +27,14 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-# Node Config - icon is Lucide icon name
+# 功能模块配置 - icon 是 Lucide 图标名
 NODES = {
-    'FUSION': {'name': 'Fusion Engine', 'icon': 'zap', 'role': 'Core'},
-    'NODE_A': {'name': 'Exchange', 'icon': 'bar-chart-2', 'role': 'CEX'},
-    'NODE_B': {'name': 'Chain', 'icon': 'link', 'role': 'Blockchain'},
-    'NODE_C': {'name': 'Social', 'icon': 'message-circle', 'role': 'Social'},
-    'NODE_C_TELEGRAM': {'name': 'Telegram', 'icon': 'send', 'role': 'TG'},
-    'WEBHOOK': {'name': 'Pusher', 'icon': 'upload', 'role': 'Push'},
+    'FUSION': {'name': 'Fusion', 'icon': 'zap', 'role': '评分引擎'},
+    'EXCHANGE': {'name': 'Exchange', 'icon': 'bar-chart-2', 'role': '交易所'},
+    'BLOCKCHAIN': {'name': 'Chain', 'icon': 'link', 'role': '区块链'},
+    'SOCIAL': {'name': 'Social', 'icon': 'message-circle', 'role': '社交'},
+    'TELEGRAM': {'name': 'Telegram', 'icon': 'send', 'role': 'TG'},
+    'PUSHER': {'name': 'Pusher', 'icon': 'upload', 'role': '推送'},
 }
 
 EXCHANGES = ['binance', 'okx', 'bybit', 'kucoin', 'gate', 'bitget', 'upbit', 'bithumb', 'coinbase', 'kraken', 'mexc', 'htx']
@@ -325,7 +325,7 @@ def get_alerts():
         alerts.append({'level': 'error', 'msg': 'Redis connection failed'})
         return jsonify(alerts)
 
-    for nid in ['FUSION', 'NODE_A']:
+    for nid in ['FUSION', 'EXCHANGE']:
         ttl = r.ttl(f"node:heartbeat:{nid}")
         if ttl < 0:
             alerts.append({'level': 'warning', 'msg': f'{nid} offline'})

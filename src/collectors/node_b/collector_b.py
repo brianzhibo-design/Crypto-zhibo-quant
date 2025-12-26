@@ -327,9 +327,9 @@ async def heartbeat_loop():
         try:
             logger.info("发送心跳...")
             result = redis_client.heartbeat(
-                'NODE_B',
-                {'node': 'NODE_B', 'status': 'online', 'stats': stats},
-                ttl=120  # 2分钟过期
+                'BLOCKCHAIN',
+                {'module': 'BLOCKCHAIN', 'status': 'running', 'stats': stats},
+                ttl=120
             )
             logger.info(f"心跳结果: {result}")
         except Exception as e:

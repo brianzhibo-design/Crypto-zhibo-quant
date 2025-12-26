@@ -354,12 +354,12 @@ async def main():
         while running:
             try:
                 heartbeat_data = {
-                    'node': 'NODE_A',
-                    'status': 'online',
+                    'module': 'EXCHANGE',
+                    'status': 'running',
                     'timestamp': str(int(time.time())),
                     'stats': json.dumps(stats)
                 }
-                redis_client.heartbeat('NODE_A', heartbeat_data, ttl=180)
+                redis_client.heartbeat('EXCHANGE', heartbeat_data, ttl=120)
                 logger.info(f"💓 心跳发送成功")
                 logger.debug(f"📊 统计: scans={stats['scans']} events={stats['events']} errors={stats['errors']}")
             except Exception as e:

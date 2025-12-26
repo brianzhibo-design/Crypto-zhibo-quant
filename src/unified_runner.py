@@ -231,19 +231,18 @@ class UnifiedRunner:
                 logger.error(f"内存监控错误: {e}")
     
     async def heartbeat(self):
-        """统一心跳 - 为所有启用的模块发送心跳"""
-        # 模块名称映射
+        """统一心跳 - 按功能模块发送心跳"""
+        # 功能模块映射 (内部模块名 -> 心跳ID)
         module_map = {
-            'collector_a': 'NODE_A',
-            'collector_b': 'NODE_B', 
-            'collector_c': 'NODE_C',
-            'telegram_monitor': 'NODE_C_TELEGRAM',
-            'fusion_engine': 'FUSION',
-            'webhook_pusher': 'WEBHOOK',
+            'collector_a': 'EXCHANGE',      # 交易所监控
+            'collector_b': 'BLOCKCHAIN',    # 区块链监控 (含新闻)
+            'collector_c': 'SOCIAL',        # 社交监控 (韩国交易所)
+            'telegram_monitor': 'TELEGRAM', # Telegram 监控
+            'fusion_engine': 'FUSION',      # 融合引擎
+            'webhook_pusher': 'PUSHER',     # 推送服务
         }
         
-        # 首次立即发送心跳，然后每 30 秒更新
-        await asyncio.sleep(2)  # 短暂等待 Redis 连接
+        await asyncio.sleep(2)  # 短暂等待模块启动
         
         while self.running:
             try:
@@ -252,17 +251,23 @@ class UnifiedRunner:
                 
                 for mod, hid in module_map.items():
                     if ENABLED_MODULES.get(mod):
+                        task = self.tasks.get(mod)
+                        # 检查任务是否还在运行
+                        is_running = task and not task.done()
+                        status = 'running' if is_running else 'stopped'
+                        
                         try:
                             self.redis.heartbeat(hid, {
-                                'node': hid,
-                                'status': 'running',
+                                'module': hid,
+                                'status': status,
                                 'uptime': str(int(uptime)),
                             }, ttl=120)
-                            online += 1
+                            if is_running:
+                                online += 1
                         except Exception as e:
                             logger.warning(f"Heartbeat {hid} failed: {e}")
                 
-                logger.info(f"[HB] {online}/{len(module_map)} online | {int(uptime)}s uptime")
+                logger.info(f"[HB] {online}/{len(module_map)} modules | {int(uptime)}s uptime")
                 await asyncio.sleep(30)
                 
             except Exception as e:
