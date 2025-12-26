@@ -341,7 +341,7 @@ async def heartbeat_loop():
             }
             
             logger.info(f"发送心跳... 事件:{stats['events']} 错误:{stats['errors']}")
-            redis_client.heartbeat('NODE_C', heartbeat_data)
+            redis_client.heartbeat('NODE_C', heartbeat_data, ttl=120)  # 2分钟过期
             
         except Exception as e:
             logger.error(f"心跳上报失败: {e}")

@@ -242,8 +242,8 @@ class UnifiedRunner:
             'webhook_pusher': 'WEBHOOK',
         }
         
-        # 首次等待 5 秒让模块启动
-        await asyncio.sleep(5)
+        # 首次立即发送心跳，然后每 30 秒更新
+        await asyncio.sleep(2)  # 短暂等待 Redis 连接
         
         while self.running:
             try:
