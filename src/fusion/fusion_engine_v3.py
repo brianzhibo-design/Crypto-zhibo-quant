@@ -469,7 +469,7 @@ class FusionEngineV3:
                         "triggered": self.stats["triggered"],
                         "filtered": self.stats["filtered"],
                     }
-                    self.redis.heartbeat("FUSION", heartbeat_data, ttl=30)
+                    self.redis.heartbeat("fusion", heartbeat_data, ttl=120)
                 except Exception as e:
                     logger.warning(f"心跳失败: {e}")
                 time.sleep(10)

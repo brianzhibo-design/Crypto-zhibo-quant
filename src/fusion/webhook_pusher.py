@@ -204,7 +204,7 @@ async def heartbeat_loop():
                 'stats': json.dumps(stats)
             }
             
-            redis_client.heartbeat('PUSHER', heartbeat_data, ttl=120)
+            redis_client.heartbeat('pusher', heartbeat_data, ttl=120)
             
         except Exception as e:
             logger.error(f"心跳上报失败: {e}")
