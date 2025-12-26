@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """
-蜜罐检测器 - 综合检测合约安全性
-================================
+蜜罐检测器 - 生产级实现
+========================
 功能:
-- 源代码静态分析
-- 交易模拟（买卖测试）
+- GoPlus Labs API 真实调用
+- Honeypot.is API 真实调用
+- 链上交易模拟
 - 多 API 交叉验证
 - 结果缓存
+
+无 Mock，所有 API 调用都是真实的
 """
 
 import os
 import asyncio
 import logging
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
-from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +26,14 @@ try:
     HAS_AIOHTTP = True
 except ImportError:
     HAS_AIOHTTP = False
+    logger.warning("aiohttp 未安装: pip install aiohttp")
 
 try:
     from web3 import Web3
     HAS_WEB3 = True
 except ImportError:
     HAS_WEB3 = False
+    logger.warning("web3 未安装: pip install web3")
 
 
 @dataclass
@@ -36,15 +41,18 @@ class SafetyResult:
     """安全检测结果"""
     safe: bool
     score: int  # 0-100
-    risks: List[str]
+    risks: List[str] = field(default_factory=list)
     buy_tax: float = 0.0
     sell_tax: float = 0.0
     can_sell: bool = True
-    details: Dict = None
-    
-    def __post_init__(self):
-        if self.details is None:
-            self.details = {}
+    holder_count: int = 0
+    lp_holders: int = 0
+    is_open_source: bool = False
+    is_proxy: bool = False
+    is_mintable: bool = False
+    owner_address: str = ""
+    details: Dict = field(default_factory=dict)
+    checked_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class HoneypotDetector:
