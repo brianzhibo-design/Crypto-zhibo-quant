@@ -501,12 +501,73 @@ def export_events():
     return jsonify(events)
 
 
+@app.route('/api/execute-trade', methods=['POST'])
+def execute_trade():
+    """执行交易请求"""
+    r = get_redis()
+    if not r:
+        return jsonify({'error': 'Redis 未连接'}), 500
+
+    data = request.json or {}
+    token_address = data.get('token_address', '')
+    symbol = data.get('symbol', '')
+    chain = data.get('chain', 'ethereum')
+    score = data.get('score', 0)
+
+    if not token_address and not symbol:
+        return jsonify({'error': '缺少代币地址或符号'}), 400
+
+    try:
+        # 写入交易请求队列
+        trade_id = r.xadd('trades:requests', {
+            'token_address': token_address or '',
+            'symbol': symbol,
+            'chain': chain,
+            'score': str(score),
+            'action': 'buy',
+            'source': 'dashboard',
+            'timestamp': str(int(time.time() * 1000)),
+        })
+        return jsonify({'success': True, 'trade_id': trade_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/event/<event_id>')
+def get_event_detail(event_id):
+    """获取单个事件详情"""
+    r = get_redis()
+    if not r:
+        return jsonify({'error': 'Redis 未连接'}), 500
+
+    try:
+        # 从 fused 流中查找
+        for mid, data in r.xrange('events:fused', event_id, event_id):
+            return jsonify({
+                'id': mid,
+                'symbol': data.get('symbols', ''),
+                'exchange': data.get('exchange', ''),
+                'score': data.get('score', ''),
+                'source_type': data.get('source_type', ''),
+                'token_type': data.get('token_type', ''),
+                'is_tradeable': data.get('is_tradeable', '0'),
+                'contract_address': data.get('contract_address', ''),
+                'chain': data.get('chain', ''),
+                'raw_text': data.get('raw_text', ''),
+                'url': data.get('url', ''),
+                'timestamp': data.get('ts', ''),
+            })
+        return jsonify({'error': '事件未找到'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 HTML = '''<!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Monitor | Dashboard</title>
+    <title>加密货币监控 | 实时仪表板</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -592,22 +653,22 @@ HTML = '''<!DOCTYPE html>
                     </div>
                     <div>
                         <h1 class="font-bold text-lg tracking-tight text-slate-800">
-                            Crypto<span class="gradient-text">Monitor</span>
+                            加密<span class="gradient-text">监控</span>
                         </h1>
-                        <div class="text-xs text-slate-400 font-medium">Real-time Intelligence</div>
+                        <div class="text-xs text-slate-400 font-medium">实时信号情报</div>
                     </div>
                 </div>
                 <div class="h-8 w-px bg-slate-200 mx-2 hidden md:block"></div>
                 <div id="systemStatus" class="hidden md:flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-200">
                     <span class="status-dot status-online"></span>
-                    System Online
+                    系统运行中
                 </div>
             </div>
             
             <div class="flex items-center gap-3">
                 <div class="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-500 hover:border-slate-300 cursor-pointer transition-colors" onclick="showSearch()">
                     <i data-lucide="search" class="w-4 h-4"></i>
-                    <span>Search...</span>
+                    <span>搜索...</span>
                     <kbd class="ml-2 px-1.5 py-0.5 bg-white rounded text-[10px] text-slate-400 border border-slate-200">⌘K</kbd>
                 </div>
                 <button onclick="loadAll()" class="h-10 w-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 transition-colors">
@@ -625,13 +686,13 @@ HTML = '''<!DOCTYPE html>
         <!-- Navigation Tabs -->
         <div class="flex items-center gap-2 mb-6">
             <button onclick="switchTab('signals')" id="tabSignals" class="tab-active px-4 py-2 rounded-lg text-sm font-medium transition-all">
-                <i data-lucide="radio" class="w-4 h-4 inline mr-1.5"></i>Signals
+                <i data-lucide="radio" class="w-4 h-4 inline mr-1.5"></i>信号
             </button>
             <button onclick="switchTab('trades')" id="tabTrades" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
-                <i data-lucide="arrow-left-right" class="w-4 h-4 inline mr-1.5"></i>Trades
+                <i data-lucide="arrow-left-right" class="w-4 h-4 inline mr-1.5"></i>交易
             </button>
             <button onclick="switchTab('nodes')" id="tabNodes" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
-                <i data-lucide="server" class="w-4 h-4 inline mr-1.5"></i>Nodes
+                <i data-lucide="server" class="w-4 h-4 inline mr-1.5"></i>节点
             </button>
         </div>
 
@@ -647,7 +708,7 @@ HTML = '''<!DOCTYPE html>
                     </span>
                 </div>
                 <div id="metricEvents" class="text-2xl font-bold text-slate-800 font-mono">--</div>
-                <div class="text-xs text-slate-400 mt-1">Total Events</div>
+                <div class="text-xs text-slate-400 mt-1">总事件数</div>
             </div>
             
             <div class="card p-5">
@@ -657,7 +718,7 @@ HTML = '''<!DOCTYPE html>
                     </div>
                 </div>
                 <div id="metricPairs" class="text-2xl font-bold text-slate-800 font-mono">--</div>
-                <div class="text-xs text-slate-400 mt-1">Trading Pairs</div>
+                <div class="text-xs text-slate-400 mt-1">交易对数</div>
             </div>
             
             <div class="card p-5">
@@ -667,7 +728,7 @@ HTML = '''<!DOCTYPE html>
                     </div>
                 </div>
                 <div id="metricTrades" class="text-2xl font-bold text-slate-800 font-mono">--</div>
-                <div class="text-xs text-slate-400 mt-1">Trades Executed</div>
+                <div class="text-xs text-slate-400 mt-1">已执行交易</div>
             </div>
             
             <div class="card p-5">
@@ -677,7 +738,7 @@ HTML = '''<!DOCTYPE html>
                     </div>
                 </div>
                 <div id="metricNodes" class="text-2xl font-bold text-slate-800 font-mono">--/--</div>
-                <div class="text-xs text-slate-400 mt-1">Nodes Online</div>
+                <div class="text-xs text-slate-400 mt-1">在线节点</div>
             </div>
         </div>
 
@@ -691,20 +752,20 @@ HTML = '''<!DOCTYPE html>
                         <div class="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-sm">
                             <i data-lucide="sparkles" class="w-4 h-4 text-sky-500"></i>
                         </div>
-                        <h3 class="font-semibold text-slate-700">AI Insight</h3>
+                        <h3 class="font-semibold text-slate-700">AI 分析</h3>
                     </div>
                     <p id="aiInsight" class="text-sm text-slate-600 leading-relaxed mb-4">
-                        Loading market analysis...
+                        正在加载市场分析...
                     </p>
                     <button onclick="loadInsight()" class="w-full py-2.5 bg-white hover:bg-slate-50 text-sky-600 text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 border border-sky-100 shadow-sm">
-                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Refresh
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> 刷新
                     </button>
                 </div>
 
                 <!-- Alpha Ranking -->
                 <div class="card p-5">
                     <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <i data-lucide="trophy" class="w-4 h-4 text-amber-500"></i> Top Signals
+                        <i data-lucide="trophy" class="w-4 h-4 text-amber-500"></i> 热门信号
                     </h3>
                     <div id="alphaRanking" class="space-y-3"></div>
                 </div>
@@ -712,14 +773,14 @@ HTML = '''<!DOCTYPE html>
                 <!-- Quick Actions -->
                 <div class="card p-5">
                     <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <i data-lucide="zap" class="w-4 h-4 text-violet-500"></i> Quick Actions
+                        <i data-lucide="zap" class="w-4 h-4 text-violet-500"></i> 快捷操作
                     </h3>
                     <div class="flex flex-col gap-2">
                         <button onclick="showTest()" class="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200">
-                            <i data-lucide="send" class="w-4 h-4"></i> Test Event
+                            <i data-lucide="send" class="w-4 h-4"></i> 测试事件
                         </button>
                         <button onclick="exportCSV()" class="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200">
-                            <i data-lucide="download" class="w-4 h-4"></i> Export CSV
+                            <i data-lucide="download" class="w-4 h-4"></i> 导出 CSV
                         </button>
                     </div>
                 </div>
@@ -730,16 +791,16 @@ HTML = '''<!DOCTYPE html>
                 <div class="card overflow-hidden flex flex-col h-full">
                     <div class="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
                         <div class="flex items-center gap-3">
-                            <h2 class="font-semibold text-slate-700">Live Feed</h2>
+                            <h2 class="font-semibold text-slate-700">实时信号流</h2>
                             <span class="bg-emerald-50 text-emerald-600 text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1">
                                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-soft"></span>
-                                Streaming
+                                实时推送
                             </span>
                         </div>
                         <div class="flex items-center gap-2">
                             <div class="flex bg-slate-100 rounded-lg p-0.5">
-                                <button onclick="setStream('fused')" id="btnFused" class="px-3 py-1.5 text-xs font-medium bg-white text-slate-700 rounded-md shadow-sm">Fused</button>
-                                <button onclick="setStream('raw')" id="btnRaw" class="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors">Raw</button>
+                                <button onclick="setStream('fused')" id="btnFused" class="px-3 py-1.5 text-xs font-medium bg-white text-slate-700 rounded-md shadow-sm">融合</button>
+                                <button onclick="setStream('raw')" id="btnRaw" class="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors">原始</button>
                             </div>
                         </div>
                     </div>
@@ -748,11 +809,11 @@ HTML = '''<!DOCTYPE html>
                         <table class="w-full text-left border-collapse">
                             <thead>
                                 <tr class="bg-slate-50/80 border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wider font-medium">
-                                    <th class="py-3 px-4 w-20">Time</th>
-                                    <th class="py-3 px-4 w-24">Token</th>
-                                    <th class="py-3 px-4 w-28">Type</th>
-                                    <th class="py-3 px-4">Signal</th>
-                                    <th class="py-3 px-4 w-20 text-right">Score</th>
+                                    <th class="py-3 px-4 w-20">时间</th>
+                                    <th class="py-3 px-4 w-24">代币</th>
+                                    <th class="py-3 px-4 w-28">类型</th>
+                                    <th class="py-3 px-4">信号</th>
+                                    <th class="py-3 px-4 w-20 text-right">评分</th>
                                 </tr>
                             </thead>
                             <tbody id="eventsList" class="divide-y divide-slate-100"></tbody>
@@ -761,7 +822,7 @@ HTML = '''<!DOCTYPE html>
                     
                     <div class="p-3 bg-slate-50 border-t border-slate-100 text-xs text-slate-400 text-center flex items-center justify-center gap-2">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-soft"></span>
-                        <span id="streamStatus">Connecting...</span>
+                        <span id="streamStatus">连接中...</span>
                     </div>
                 </div>
             </div>
@@ -773,10 +834,10 @@ HTML = '''<!DOCTYPE html>
                 <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-3">
-                            <h2 class="font-semibold text-slate-700">Trade History</h2>
+                            <h2 class="font-semibold text-slate-700">交易历史</h2>
                             <div id="tradeStats" class="flex items-center gap-2 text-xs">
-                                <span class="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Success: <span id="tradeSuccess">0</span></span>
-                                <span class="bg-red-50 text-red-600 px-2 py-0.5 rounded-full">Failed: <span id="tradeFailed">0</span></span>
+                                <span class="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">成功: <span id="tradeSuccess">0</span></span>
+                                <span class="bg-red-50 text-red-600 px-2 py-0.5 rounded-full">失败: <span id="tradeFailed">0</span></span>
                             </div>
                         </div>
                     </div>
@@ -785,14 +846,14 @@ HTML = '''<!DOCTYPE html>
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="bg-slate-50/80 border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wider font-medium">
-                                <th class="py-3 px-4 w-24">Time</th>
-                                <th class="py-3 px-4 w-20">Action</th>
-                                <th class="py-3 px-4 w-24">Token</th>
-                                <th class="py-3 px-4 w-20">Chain</th>
-                                <th class="py-3 px-4">Amount</th>
-                                <th class="py-3 px-4 w-20">Price</th>
-                                <th class="py-3 px-4 w-20">PnL</th>
-                                <th class="py-3 px-4 w-20">Status</th>
+                                <th class="py-3 px-4 w-24">时间</th>
+                                <th class="py-3 px-4 w-20">操作</th>
+                                <th class="py-3 px-4 w-24">代币</th>
+                                <th class="py-3 px-4 w-20">链</th>
+                                <th class="py-3 px-4">数量</th>
+                                <th class="py-3 px-4 w-20">价格</th>
+                                <th class="py-3 px-4 w-20">盈亏</th>
+                                <th class="py-3 px-4 w-20">状态</th>
                             </tr>
                         </thead>
                         <tbody id="tradesList" class="divide-y divide-slate-100"></tbody>
@@ -800,8 +861,8 @@ HTML = '''<!DOCTYPE html>
                 </div>
                 <div id="noTrades" class="hidden p-12 text-center text-slate-400">
                     <i data-lucide="inbox" class="w-12 h-12 mx-auto mb-4 text-slate-300"></i>
-                    <p class="font-medium">No trades yet</p>
-                    <p class="text-sm mt-1">Trades will appear here when executed</p>
+                    <p class="font-medium">暂无交易记录</p>
+                    <p class="text-sm mt-1">交易执行后将在此显示</p>
                 </div>
             </div>
         </div>
@@ -816,12 +877,12 @@ HTML = '''<!DOCTYPE html>
     <div id="searchModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50">
         <div class="card p-5 w-full max-w-lg mx-4 max-h-[70vh] overflow-hidden">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="font-semibold text-slate-700">Search</h3>
+                <h3 class="font-semibold text-slate-700">搜索</h3>
                 <button onclick="closeSearch()" class="text-slate-400 hover:text-slate-600 transition-colors">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
-            <input id="searchInput" type="text" placeholder="Search tokens, exchanges..." 
+            <input id="searchInput" type="text" placeholder="搜索代币、交易所..." 
                    class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 mb-4"
                    onkeyup="if(event.key==='Enter')doSearch()">
             <div id="searchResults" class="max-h-[50vh] overflow-y-auto scrollbar"></div>
@@ -831,14 +892,81 @@ HTML = '''<!DOCTYPE html>
     <!-- Test Modal -->
     <div id="testModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50">
         <div class="card p-5 w-full max-w-sm mx-4">
-            <h3 class="font-semibold text-slate-700 mb-4">Send Test Event</h3>
-            <input id="testSymbol" type="text" placeholder="Symbol (e.g. PEPE)" 
+            <h3 class="font-semibold text-slate-700 mb-4">发送测试事件</h3>
+            <input id="testSymbol" type="text" placeholder="代币符号 (如 PEPE)" 
                    class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 mb-4">
             <div class="flex gap-3">
-                <button onclick="sendTest()" class="flex-1 py-2.5 bg-sky-500 hover:bg-sky-600 text-white rounded-xl font-medium transition-colors">Send</button>
-                <button onclick="hideTest()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-medium transition-colors">Cancel</button>
+                <button onclick="sendTest()" class="flex-1 py-2.5 bg-sky-500 hover:bg-sky-600 text-white rounded-xl font-medium transition-colors">发送</button>
+                <button onclick="hideTest()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-medium transition-colors">取消</button>
             </div>
             <div id="testResult" class="mt-3 text-sm text-center"></div>
+        </div>
+    </div>
+    
+    <!-- Event Detail Modal 消息详情弹窗 -->
+    <div id="eventDetailModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50" onclick="if(event.target===this)closeEventDetail()">
+        <div class="card p-6 w-full max-w-2xl mx-4 max-h-[85vh] overflow-hidden">
+            <div class="flex justify-between items-center mb-5">
+                <div class="flex items-center gap-3">
+                    <div id="detailRatingBadge" class="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-white font-bold text-xl">S</div>
+                    <div>
+                        <h3 id="detailSymbol" class="font-bold text-xl text-slate-800">BTC</h3>
+                        <div id="detailExchange" class="text-sm text-slate-400">Binance</div>
+                    </div>
+                </div>
+                <button onclick="closeEventDetail()" class="text-slate-400 hover:text-slate-600 transition-colors p-2 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <div class="text-xs text-slate-400 mb-1">评分</div>
+                    <div id="detailScore" class="font-bold text-lg text-slate-700">85</div>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <div class="text-xs text-slate-400 mb-1">信号源</div>
+                    <div id="detailSource" class="font-medium text-slate-700">cex_listing</div>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <div class="text-xs text-slate-400 mb-1">代币类型</div>
+                    <div id="detailTokenType" class="font-medium text-slate-700">new_token</div>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <div class="text-xs text-slate-400 mb-1">可交易</div>
+                    <div id="detailTradeable" class="font-medium text-emerald-600">✓ 是</div>
+                </div>
+            </div>
+            
+            <div class="mb-5">
+                <div class="text-xs text-slate-400 uppercase tracking-wider mb-2">原始信号内容</div>
+                <div id="detailRawText" class="bg-slate-50 rounded-xl p-4 text-sm text-slate-600 leading-relaxed max-h-[200px] overflow-y-auto scrollbar">
+                    Loading...
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-5">
+                <div>
+                    <div class="text-xs text-slate-400 uppercase tracking-wider mb-2">合约地址</div>
+                    <div id="detailContract" class="bg-slate-50 rounded-xl p-3 font-mono text-xs text-slate-600 break-all">-</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-400 uppercase tracking-wider mb-2">链</div>
+                    <div id="detailChain" class="bg-slate-50 rounded-xl p-3 font-medium text-slate-600">Ethereum</div>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button id="btnBuyNow" onclick="executeBuy()" class="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
+                    <i data-lucide="shopping-cart" class="w-4 h-4"></i> 立即买入
+                </button>
+                <button onclick="copyContract()" class="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-medium transition-colors flex items-center gap-2">
+                    <i data-lucide="copy" class="w-4 h-4"></i> 复制合约
+                </button>
+                <a id="detailLink" href="#" target="_blank" class="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-medium transition-colors flex items-center gap-2">
+                    <i data-lucide="external-link" class="w-4 h-4"></i>
+                </a>
+            </div>
         </div>
     </div>
 
@@ -893,9 +1021,9 @@ HTML = '''<!DOCTYPE html>
                 // System status
                 const statusEl = document.getElementById('systemStatus');
                 if (online < total / 2) {
-                    statusEl.innerHTML = '<span class="status-dot status-offline"></span> Degraded';
+                    statusEl.innerHTML = '<span class="status-dot status-offline"></span> 部分降级';
                 } else {
-                    statusEl.innerHTML = '<span class="status-dot status-online"></span> System Online';
+                    statusEl.innerHTML = '<span class="status-dot status-online"></span> 系统运行中';
                 }
 
                 window._nodes = nodes;
@@ -945,34 +1073,57 @@ HTML = '''<!DOCTYPE html>
             lucide.createIcons();
         }
 
+        // 存储当前事件列表用于详情弹窗
+        let currentEvents = [];
+        
+        // 类型中文映射
+        const typeMap = {
+            'Whale Alert': '鲸鱼警报',
+            'New Listing': '新币上市',
+            'Volume Spike': '成交量激增',
+            'Signal': '信号',
+            'new_listing': '新币上市',
+            'cex_listing': '交易所上币',
+            'dex_pool': 'DEX新池',
+            'telegram': 'TG信号',
+            'news': '新闻',
+            'whale': '鲸鱼',
+        };
+
         async function loadEvents() {
             try {
                 const res = await fetch(`/api/events?limit=25&stream=${currentStream}`);
                 const events = await res.json();
+                currentEvents = events;
                 const c = document.getElementById('eventsList');
 
                 if (!events.length) {
-                    c.innerHTML = '<tr><td colspan="5" class="text-center text-slate-400 py-12">Waiting for events...</td></tr>';
+                    c.innerHTML = '<tr><td colspan="5" class="text-center text-slate-400 py-12">等待信号中...</td></tr>';
                     return;
                 }
 
                 let h = '';
-                for (const e of events) {
-                    const t = e.ts ? new Date(parseInt(e.ts)).toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit'}) : '--:--';
+                for (let i = 0; i < events.length; i++) {
+                    const e = events[i];
+                    const t = e.ts ? new Date(parseInt(e.ts)).toLocaleTimeString('zh-CN', {hour12: false, hour: '2-digit', minute: '2-digit'}) : '--:--';
                     const score = parseFloat(e.score || 0);
                     
                     let typeClass = 'bg-slate-100 text-slate-500';
                     let typeIcon = 'radio';
-                    if (e.type === 'Whale Alert') { typeClass = 'bg-purple-100 text-purple-600'; typeIcon = 'fish'; }
-                    else if (e.type === 'New Listing') { typeClass = 'bg-blue-100 text-blue-600'; typeIcon = 'plus-circle'; }
+                    const typeLabel = typeMap[e.type] || typeMap[e.source_type] || e.type || '信号';
+                    
+                    if (e.type === 'Whale Alert' || e.source_type === 'whale') { typeClass = 'bg-purple-100 text-purple-600'; typeIcon = 'fish'; }
+                    else if (e.type === 'New Listing' || e.source_type === 'cex_listing') { typeClass = 'bg-blue-100 text-blue-600'; typeIcon = 'plus-circle'; }
                     else if (e.type === 'Volume Spike') { typeClass = 'bg-amber-100 text-amber-600'; typeIcon = 'trending-up'; }
+                    else if (e.source_type === 'dex_pool') { typeClass = 'bg-green-100 text-green-600'; typeIcon = 'droplet'; }
+                    else if (e.source_type === 'telegram') { typeClass = 'bg-sky-100 text-sky-600'; typeIcon = 'send'; }
 
                     let scoreColor = 'bg-slate-200';
                     if (score > 70) scoreColor = 'bg-emerald-400';
                     else if (score > 40) scoreColor = 'bg-sky-400';
 
                     h += `
-                    <tr class="feed-row hover:bg-slate-50/80 transition-colors text-sm">
+                    <tr class="feed-row hover:bg-slate-50/80 transition-colors text-sm cursor-pointer" onclick="showEventDetail(${i})">
                         <td class="py-3 px-4 font-mono text-slate-400 text-xs">${t}</td>
                         <td class="py-3 px-4">
                             <span class="font-semibold text-slate-700">${e.symbol}</span>
@@ -980,7 +1131,7 @@ HTML = '''<!DOCTYPE html>
                         <td class="py-3 px-4">
                             <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${typeClass}">
                                 <i data-lucide="${typeIcon}" class="w-3 h-3"></i>
-                                ${e.type || 'Signal'}
+                                ${typeLabel}
                             </span>
                         </td>
                         <td class="py-3 px-4 text-slate-500 max-w-xs truncate text-sm" title="${e.text}">
@@ -998,11 +1149,11 @@ HTML = '''<!DOCTYPE html>
                     </tr>`;
                 }
                 c.innerHTML = h;
-                document.getElementById('streamStatus').textContent = `${events.length} events loaded`;
+                document.getElementById('streamStatus').textContent = `已加载 ${events.length} 条信号`;
                 lucide.createIcons();
             } catch (e) { 
                 console.error(e);
-                document.getElementById('streamStatus').textContent = 'Connection error';
+                document.getElementById('streamStatus').textContent = '连接错误';
             }
         }
 
@@ -1077,7 +1228,7 @@ HTML = '''<!DOCTYPE html>
                 const c = document.getElementById('alphaRanking');
 
                 if (!data.length) {
-                    c.innerHTML = '<div class="text-center text-slate-400 text-sm py-4">No signals yet</div>';
+                    c.innerHTML = '<div class="text-center text-slate-400 text-sm py-4">暂无热门信号</div>';
                     return;
                 }
 
@@ -1107,12 +1258,12 @@ HTML = '''<!DOCTYPE html>
 
         async function loadInsight() {
             try {
-                document.getElementById('aiInsight').textContent = 'Analyzing market patterns...';
+                document.getElementById('aiInsight').textContent = '正在分析市场趋势...';
                 const res = await fetch('/api/insight');
                 const data = await res.json();
-                document.getElementById('aiInsight').textContent = data.summary || 'System operational. Awaiting market activity.';
+                document.getElementById('aiInsight').textContent = data.summary || '系统运行正常，等待市场活动。';
             } catch (e) {
-                document.getElementById('aiInsight').textContent = 'Unable to generate insight.';
+                document.getElementById('aiInsight').textContent = '无法生成分析报告。';
             }
         }
 
@@ -1142,14 +1293,14 @@ HTML = '''<!DOCTYPE html>
             const q = document.getElementById('searchInput').value;
             if (!q || q.length < 2) return;
             
-            document.getElementById('searchResults').innerHTML = '<div class="text-center text-slate-400 py-4">Searching...</div>';
+            document.getElementById('searchResults').innerHTML = '<div class="text-center text-slate-400 py-4">搜索中...</div>';
             
             try {
                 const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
                 const data = await res.json();
                 
                 if (!data.results?.length) {
-                    document.getElementById('searchResults').innerHTML = '<div class="text-center text-slate-400 py-4">No results found</div>';
+                    document.getElementById('searchResults').innerHTML = '<div class="text-center text-slate-400 py-4">未找到结果</div>';
                     return;
                 }
                 
@@ -1166,7 +1317,7 @@ HTML = '''<!DOCTYPE html>
                 }
                 document.getElementById('searchResults').innerHTML = h;
             } catch (e) {
-                document.getElementById('searchResults').innerHTML = '<div class="text-center text-red-500 py-4">Search failed</div>';
+                document.getElementById('searchResults').innerHTML = '<div class="text-center text-red-500 py-4">搜索失败</div>';
             }
         }
 
@@ -1191,16 +1342,123 @@ HTML = '''<!DOCTYPE html>
                 });
                 const data = await res.json();
                 document.getElementById('testResult').innerHTML = data.success 
-                    ? '<span class="text-emerald-500">Event sent successfully</span>'
-                    : '<span class="text-red-500">Failed to send</span>';
+                    ? '<span class="text-emerald-500">事件发送成功</span>'
+                    : '<span class="text-red-500">发送失败</span>';
                 if (data.success) setTimeout(() => { hideTest(); loadEvents(); }, 1000);
             } catch (e) {
-                document.getElementById('testResult').innerHTML = '<span class="text-red-500">Request failed</span>';
+                document.getElementById('testResult').innerHTML = '<span class="text-red-500">请求失败</span>';
             }
         }
 
         function exportCSV() {
             window.open('/api/export?format=csv');
+        }
+
+        // 消息详情弹窗
+        let currentDetailEvent = null;
+        
+        function showEventDetail(idx) {
+            const e = currentEvents[idx];
+            if (!e) return;
+            currentDetailEvent = e;
+            
+            const modal = document.getElementById('eventDetailModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            // 填充数据
+            document.getElementById('detailSymbol').textContent = e.symbol || '-';
+            document.getElementById('detailExchange').textContent = e.exchange || '-';
+            document.getElementById('detailScore').textContent = parseFloat(e.score || 0).toFixed(0);
+            document.getElementById('detailSource').textContent = typeMap[e.source_type] || e.source || '-';
+            document.getElementById('detailTokenType').textContent = e.token_type || '-';
+            
+            const isTradeable = e.is_tradeable === '1' || e.is_tradeable === true;
+            document.getElementById('detailTradeable').innerHTML = isTradeable 
+                ? '<span class="text-emerald-600">✓ 是</span>' 
+                : '<span class="text-red-500">✗ 否</span>';
+            
+            document.getElementById('detailRawText').textContent = e.text || e.raw_text || '无内容';
+            document.getElementById('detailContract').textContent = e.contract_address || '-';
+            document.getElementById('detailChain').textContent = e.chain || 'Ethereum';
+            
+            // 评级徽章颜色
+            const score = parseFloat(e.score || 0);
+            const badge = document.getElementById('detailRatingBadge');
+            let rating = 'C';
+            let bgColor = 'bg-slate-400';
+            if (score >= 95) { rating = 'SSS'; bgColor = 'bg-red-500'; }
+            else if (score >= 85) { rating = 'SS'; bgColor = 'bg-orange-500'; }
+            else if (score >= 75) { rating = 'S'; bgColor = 'bg-amber-500'; }
+            else if (score >= 60) { rating = 'A'; bgColor = 'bg-emerald-500'; }
+            else if (score >= 40) { rating = 'B'; bgColor = 'bg-sky-500'; }
+            badge.textContent = rating;
+            badge.className = `w-12 h-12 rounded-xl ${bgColor} flex items-center justify-center text-white font-bold text-xl`;
+            
+            // 外链
+            if (e.url) {
+                document.getElementById('detailLink').href = e.url;
+                document.getElementById('detailLink').style.display = 'flex';
+            } else {
+                document.getElementById('detailLink').style.display = 'none';
+            }
+            
+            // 买入按钮状态
+            const btnBuy = document.getElementById('btnBuyNow');
+            if (!isTradeable) {
+                btnBuy.disabled = true;
+                btnBuy.className = 'flex-1 py-3 bg-slate-300 text-slate-500 rounded-xl font-medium cursor-not-allowed flex items-center justify-center gap-2';
+            } else {
+                btnBuy.disabled = false;
+                btnBuy.className = 'flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2';
+            }
+            
+            lucide.createIcons();
+        }
+        
+        function closeEventDetail() {
+            const modal = document.getElementById('eventDetailModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            currentDetailEvent = null;
+        }
+        
+        function copyContract() {
+            const contract = document.getElementById('detailContract').textContent;
+            if (contract && contract !== '-') {
+                navigator.clipboard.writeText(contract).then(() => {
+                    alert('合约地址已复制!');
+                });
+            }
+        }
+        
+        async function executeBuy() {
+            if (!currentDetailEvent) return;
+            
+            const confirmed = confirm(`确定买入 ${currentDetailEvent.symbol}?\n\n合约: ${currentDetailEvent.contract_address || '无'}\n链: ${currentDetailEvent.chain || 'ethereum'}`);
+            if (!confirmed) return;
+            
+            try {
+                const res = await fetch('/api/execute-trade', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        token_address: currentDetailEvent.contract_address,
+                        symbol: currentDetailEvent.symbol,
+                        chain: currentDetailEvent.chain || 'ethereum',
+                        score: currentDetailEvent.score,
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('交易请求已提交!');
+                    closeEventDetail();
+                } else {
+                    alert('交易失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('请求失败: ' + e.message);
+            }
         }
 
         function loadAll() {
@@ -1230,6 +1488,7 @@ HTML = '''<!DOCTYPE html>
             if (e.key === 'Escape') {
                 closeSearch();
                 hideTest();
+                closeEventDetail();
             }
         });
     </script>
