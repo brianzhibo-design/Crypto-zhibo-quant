@@ -42,6 +42,14 @@ except ImportError:
 # 导入机构级评分器
 from .scoring_engine import InstitutionalScorer, TIER_S_SOURCES, TRIGGER_THRESHOLD
 
+# 导入代币分类器
+try:
+    from analysis.token_classifier import TokenClassifier, get_classifier
+    HAS_CLASSIFIER = True
+except ImportError:
+    HAS_CLASSIFIER = False
+    logger.warning("TokenClassifier 未导入，代币分类功能禁用")
+
 logger = get_logger('fusion_engine')
 
 
@@ -159,6 +167,9 @@ class FusionEngineV3:
         self.scorer = InstitutionalScorer()
         self.aggregator = SuperEventAggregator(window_seconds=5)
         self.running = True
+        
+        # 代币分类器
+        self.token_classifier = get_classifier() if HAS_CLASSIFIER else None
         self.stats = {
             'processed': 0,
             'fused': 0,
@@ -175,13 +186,26 @@ class FusionEngineV3:
         
         # 🆕 获取合约地址（优先使用 Collector 已提取的，否则从 raw_text 提取）
         contract_address = event.get('contract_address', '')
-        chain = event.get('chain', '')
+        chain = event.get('chain', '') or 'ethereum'
         
         if not contract_address and raw_text:
             # 从原始文本中提取合约地址
             contract_info = extract_contract_address(raw_text)
             contract_address = contract_info.get('contract_address', '')
-            chain = contract_info.get('chain', '')
+            chain = contract_info.get('chain', '') or chain
+        
+        # 🆕 代币分类
+        symbol = score_info['symbols'][0] if score_info['symbols'] else ''
+        source_type = 'unknown'
+        token_type = 'unknown'
+        is_tradeable = False
+        
+        if self.token_classifier and symbol:
+            source_type = self.token_classifier.classify_source(
+                event.get('source', ''), raw_text
+            ).value
+            token_type = self.token_classifier.classify_token_type(symbol).value
+            is_tradeable = self.token_classifier.is_tradeable_token(symbol)
         
         return {
             # 基础信息
@@ -198,6 +222,11 @@ class FusionEngineV3:
             # 🆕 合约地址字段
             'contract_address': contract_address or '',
             'chain': chain or '',
+            
+            # 🆕 代币分类字段
+            'source_type': source_type,
+            'token_type': token_type,
+            'is_tradeable': '1' if is_tradeable else '0',
             
             # 社交媒体字段
             'account': event.get('account', ''),
@@ -259,12 +288,25 @@ class FusionEngineV3:
         
         # 🆕 获取合约地址
         contract_address = best_event.get('contract_address', '')
-        chain = best_event.get('chain', '')
+        chain = best_event.get('chain', '') or 'ethereum'
         
         if not contract_address and raw_text:
             contract_info = extract_contract_address(raw_text)
             contract_address = contract_info.get('contract_address', '')
-            chain = contract_info.get('chain', '')
+            chain = contract_info.get('chain', '') or chain
+        
+        # 🆕 代币分类
+        symbol = super_event['symbol']
+        source_type = 'unknown'
+        token_type = 'unknown'
+        is_tradeable = False
+        
+        if self.token_classifier and symbol:
+            # 使用第一个源进行分类
+            first_source = list(super_event['sources'])[0] if super_event['sources'] else ''
+            source_type = self.token_classifier.classify_source(first_source, raw_text).value
+            token_type = self.token_classifier.classify_token_type(symbol).value
+            is_tradeable = self.token_classifier.is_tradeable_token(symbol)
         
         return {
             # 基础信息
@@ -280,6 +322,11 @@ class FusionEngineV3:
             # 🆕 合约地址字段
             'contract_address': contract_address or '',
             'chain': chain or '',
+            
+            # 🆕 代币分类字段
+            'source_type': source_type,
+            'token_type': token_type,
+            'is_tradeable': '1' if is_tradeable else '0',
             
             # 超级事件字段
             'is_super_event': '1' if super_event['is_super_event'] else '0',

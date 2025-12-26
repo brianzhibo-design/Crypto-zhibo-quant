@@ -37,6 +37,14 @@ except ImportError:
     HoneypotDetector = None
     RiskManager = None
 
+# 代币分类器
+try:
+    from ..analysis.token_classifier import TokenClassifier, get_classifier, TokenType
+    HAS_CLASSIFIER = True
+except ImportError:
+    HAS_CLASSIFIER = False
+    TokenClassifier = None
+
 
 @dataclass
 class TradeSignal:
@@ -45,6 +53,10 @@ class TradeSignal:
     chain: str
     score: int
     source: str
+    symbol: str = ""
+    token_type: str = "unknown"  # new_token/recent_token/meme/stablecoin/wrapped/established
+    source_type: str = "unknown"  # cex_listing/dex_pool/telegram/twitter/news/whale/onchain
+    is_tradeable: bool = False
     metadata: Dict = field(default_factory=dict)
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -76,6 +88,7 @@ class AutoTrader:
         # 组件
         self.honeypot_detector = HoneypotDetector() if HoneypotDetector else None
         self.risk_manager = RiskManager() if RiskManager else None
+        self.token_classifier = get_classifier() if HAS_CLASSIFIER else None
         
         # 钱包
         self.wallet = None
@@ -248,7 +261,24 @@ class AutoTrader:
             logger.info(f"[PreCheck] 链 {signal.chain} 不在白名单")
             return False
         
-        # 4. 检查风控
+        # 4. 🆕 检查代币类型（排除稳定币、包装代币、已成熟代币）
+        if signal.token_type in ['stablecoin', 'wrapped']:
+            logger.info(f"[PreCheck] 跳过 {signal.token_type}: {signal.symbol}")
+            return False
+        
+        if not signal.is_tradeable:
+            logger.info(f"[PreCheck] 代币不可交易: {signal.symbol} ({signal.token_type})")
+            return False
+        
+        # 5. 🆕 检查信号源类型（优先处理 CEX 上币和 DEX 新池）
+        priority_sources = trading_config.get('priority_sources', ['cex_listing', 'dex_pool', 'telegram'])
+        if signal.source_type not in priority_sources:
+            # 非优先信号源需要更高分数
+            if signal.score < min_score + 15:
+                logger.info(f"[PreCheck] 非优先源 {signal.source_type} 需要更高分数")
+                return False
+        
+        # 6. 检查风控
         if self.risk_manager:
             if not await self.risk_manager.can_trade():
                 logger.warning("[PreCheck] 风控限制")
