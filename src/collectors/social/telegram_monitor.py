@@ -60,7 +60,22 @@ redis_client = RedisClient.from_env()
 telethon_conf = config.get('telethon', {})
 api_id = int(os.getenv('TELEGRAM_API_ID', telethon_conf.get('api_id', 0)))
 api_hash = os.getenv('TELEGRAM_API_HASH', telethon_conf.get('api_hash', ''))
-session_name = os.path.join(str(Path(__file__).parent), 'telegram_monitor')
+# Session 路径 - 优先使用 config.secret 目录
+session_paths = [
+    project_root / 'config.secret' / 'telegram_monitor',
+    Path(__file__).parent / 'telegram_monitor',
+    Path('/app/config.secret/telegram_monitor'),
+]
+session_name = None
+for sp in session_paths:
+    session_file = Path(str(sp) + '.session')
+    if session_file.exists():
+        session_name = str(sp)
+        logger.info(f"[OK] 使用现有 session: {session_file}")
+        break
+if not session_name:
+    session_name = str(project_root / 'config.secret' / 'telegram_monitor')
+    logger.info(f"[INFO] 使用默认 session 路径: {session_name}")
 
 # 频道配置
 channel_entries = []
