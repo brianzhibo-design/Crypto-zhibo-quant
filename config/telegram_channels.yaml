@@ -13,19 +13,23 @@ channels:
       name: Bybit Announcements
       priority: 1
       
-    - username: okx_announcements
+    - username: okxannouncements
       name: OKX Announcements
+      priority: 1
+      
+    - username: okxchinese
+      name: 欧易OKX公告 (中文)
       priority: 1
       
     - username: KuCoin_News
       name: KuCoin News
       priority: 1
       
-    - username: gaborateio_ann
+    - username: gaborateio
       name: Gate.io Announcements
       priority: 2
       
-    - username: bitaborget_announcements
+    - username: bitget_announcements
       name: Bitget Announcements
       priority: 2
       

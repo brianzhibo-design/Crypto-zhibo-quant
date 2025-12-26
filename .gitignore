@@ -26,3 +26,10 @@ data/redis_snapshots/
 
 # Temp
 .temp_extract/
+
+# Session files (敏感信息)
+*.session
+config.secret/*.session
+
+# Docker env (可能包含敏感信息)
+docker/.env
