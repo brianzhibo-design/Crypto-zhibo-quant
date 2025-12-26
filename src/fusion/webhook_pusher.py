@@ -158,16 +158,18 @@ async def process_fused_events():
     async with aiohttp.ClientSession() as session:
         while running:
             try:
-                # 读取融合事件
-                events = redis_client.consume_stream(
+                # 读取融合事件（使用线程避免阻塞事件循环）
+                events = await asyncio.to_thread(
+                    redis_client.consume_stream,
                     stream_name,
                     consumer_group,
                     consumer_name,
-                    count=10,
-                    block=1000
+                    10,  # count
+                    500  # block (ms) - 减少阻塞时间
                 )
                 
                 if not events:
+                    await asyncio.sleep(0.1)  # 让出控制权
                     continue
                 
                 for stream, messages in events:
@@ -195,16 +197,21 @@ async def process_fused_events():
 
 async def heartbeat_loop():
     """心跳上报"""
+    first_beat = True
     while running:
         try:
             heartbeat_data = {
-                'module': 'PUSHER',
+                'module': 'pusher',
                 'status': 'running',
                 'timestamp': int(datetime.now(timezone.utc).timestamp()),
                 'stats': json.dumps(stats)
             }
             
             redis_client.heartbeat('pusher', heartbeat_data, ttl=120)
+            
+            if first_beat:
+                logger.info("[Pusher] 心跳循环已启动")
+                first_beat = False
             
         except Exception as e:
             logger.error(f"心跳上报失败: {e}")
