@@ -362,23 +362,27 @@ async def main():
     
     logger.info(f"[OK] 创建了 {len(input_peers)} 个 InputPeerChannel")
     
-    try:
-        channels = await client.get_entities(input_peers)
-        logger.info(f"[OK] 成功解析 {len(channels)} 个频道")
-    except Exception as e:
-        logger.error(f"批量解析失败: {e}")
-        logger.info("降级为逐个解析...")
-        channels = []
-        for i, peer in enumerate(input_peers):
-            try:
-                entity = await client.get_entity(peer)
-                channels.append(entity)
-                if (i + 1) % 20 == 0:
-                    logger.info(f"已解析 {i+1}/{len(input_peers)}")
-                    await asyncio.sleep(1)
-            except Exception as e2:
-                logger.warning(f"跳过频道 {i}: {e2}")
-        logger.info(f"[OK] 降级解析完成: {len(channels)} 个频道")
+    # 逐个解析频道实体（get_entities 在某些版本不可用）
+    channels = []
+    failed_channels = []
+    
+    for i, (peer, ch_info) in enumerate(zip(input_peers, channel_entries)):
+        try:
+            entity = await client.get_entity(peer)
+            channels.append(entity)
+        except Exception as e:
+            failed_channels.append(ch_info.get('username', str(ch_info['id'])))
+            logger.debug(f"频道解析失败 {ch_info.get('username')}: {e}")
+        
+        # 每 20 个输出进度
+        if (i + 1) % 20 == 0:
+            logger.info(f"解析进度: {i+1}/{len(input_peers)}, 成功: {len(channels)}")
+            await asyncio.sleep(0.5)
+    
+    logger.info(f"[OK] 频道解析完成: {len(channels)}/{len(input_peers)} 成功")
+    
+    if failed_channels:
+        logger.warning(f"失败的频道 ({len(failed_channels)}): {', '.join(failed_channels[:10])}")
     
     if not channels:
         logger.error("没有可监控的频道！")
