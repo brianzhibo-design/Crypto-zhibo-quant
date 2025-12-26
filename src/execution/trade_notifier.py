@@ -150,59 +150,122 @@ class TradeNotifier:
             logger.error(f"保存交易记录到Redis失败: {e}")
     
     async def _send_wechat(self, notification: TradeNotification) -> bool:
-        """发送到企业微信"""
+        """发送到企业微信 - 详细版"""
         webhook_url = self.wechat_trade_webhook or self.wechat_signal_webhook
         if not webhook_url:
             return False
         
         try:
-            # 构建消息
-            status_emoji = {
-                'success': '✅',
-                'failed': '❌',
-                'pending': '⏳',
-                'executing': '🔄',
-                'partial': '⚠️',
-                'cancelled': '🚫',
+            # 状态和动作映射
+            status_config = {
+                'success': {'emoji': '✅', 'text': '成功', 'color': 'info'},
+                'failed': {'emoji': '❌', 'text': '失败', 'color': 'warning'},
+                'pending': {'emoji': '⏳', 'text': '等待中', 'color': 'comment'},
+                'executing': {'emoji': '🔄', 'text': '执行中', 'color': 'comment'},
+                'partial': {'emoji': '⚠️', 'text': '部分成交', 'color': 'warning'},
+                'cancelled': {'emoji': '🚫', 'text': '已取消', 'color': 'comment'},
             }
             
-            action_emoji = {
-                'buy': '🟢 买入',
-                'sell': '🔴 卖出',
-                'swap': '🔄 兑换',
+            action_config = {
+                'buy': {'emoji': '🟢', 'text': '买入', 'cn': '买入'},
+                'sell': {'emoji': '🔴', 'text': '卖出', 'cn': '卖出'},
+                'swap': {'emoji': '🔄', 'text': '兑换', 'cn': '兑换'},
             }
             
-            emoji = status_emoji.get(notification.status, '📊')
-            action = action_emoji.get(notification.action, notification.action)
+            # 链配置
+            chain_config = {
+                'ethereum': {'name': 'Ethereum', 'symbol': 'ETH', 'emoji': '💎'},
+                'eth': {'name': 'Ethereum', 'symbol': 'ETH', 'emoji': '💎'},
+                'bsc': {'name': 'BNB Chain', 'symbol': 'BNB', 'emoji': '🟡'},
+                'base': {'name': 'Base', 'symbol': 'ETH', 'emoji': '🔵'},
+                'arbitrum': {'name': 'Arbitrum', 'symbol': 'ETH', 'emoji': '🔷'},
+                'polygon': {'name': 'Polygon', 'symbol': 'MATIC', 'emoji': '🟣'},
+                'solana': {'name': 'Solana', 'symbol': 'SOL', 'emoji': '🟪'},
+            }
             
-            # PnL 显示
-            pnl_text = ""
-            if notification.pnl_percent is not None:
-                pnl_emoji = "📈" if notification.pnl_percent > 0 else "📉"
-                pnl_text = f"\n{pnl_emoji} 盈亏: {notification.pnl_percent:+.2f}%"
+            status = status_config.get(notification.status, status_config['pending'])
+            action = action_config.get(notification.action, action_config['buy'])
+            chain = chain_config.get(notification.chain.lower(), {'name': notification.chain, 'symbol': '?', 'emoji': '⛓️'})
             
-            # 构建 Markdown 消息
-            content = f"""{emoji} **交易执行通知**
+            # 时间格式化
+            ts = datetime.fromtimestamp(notification.timestamp / 1000, tz=timezone.utc)
+            time_str = ts.strftime('%Y-%m-%d %H:%M:%S UTC')
+            
+            # 计算交易价值
+            trade_value = notification.amount_in * notification.price_usd if notification.action == 'buy' else notification.amount_out
+            
+            # 合约地址缩写
+            addr_short = f"{notification.token_address[:6]}...{notification.token_address[-4:]}" if notification.token_address and len(notification.token_address) > 10 else notification.token_address
+            
+            # 构建详细消息
+            content = f"""{status['emoji']} **交易执行通知 - {status['text']}**
 
-**{action}** {notification.token_symbol}
-━━━━━━━━━━━━━━━━
-📍 链: {notification.chain.upper()}
-💰 数量: {notification.amount_in:.6f} → {notification.amount_out:.6f}
-💵 价格: ${notification.price_usd:.6f}
-⛽ Gas: {notification.gas_used:.4f} ({notification.gas_price_gwei:.1f} Gwei)
-🏪 DEX: {notification.dex}{pnl_text}
+{action['emoji']} **{action['cn']} {notification.token_symbol}**
 
-📊 信号分数: {notification.signal_score:.0f}
-📡 来源: {notification.signal_source}
+━━━━━━━━ 交易详情 ━━━━━━━━
+
+{chain['emoji']} **区块链**: {chain['name']}
+📝 **交易ID**: `{notification.trade_id}`
+⏰ **时间**: {time_str}
+
+━━━━━━━━ 代币信息 ━━━━━━━━
+
+🪙 **代币**: {notification.token_symbol}
+📋 **合约**: `{addr_short}`
+💵 **价格**: ${notification.price_usd:.8f}
+
+━━━━━━━━ 交易数据 ━━━━━━━━
+
+📥 **输入**: {notification.amount_in:.6f} {chain['symbol'] if notification.action == 'buy' else notification.token_symbol}
+📤 **输出**: {notification.amount_out:.6f} {notification.token_symbol if notification.action == 'buy' else chain['symbol']}
+💰 **价值**: ${trade_value:.2f} USD
+🏪 **DEX**: {notification.dex}
+
+━━━━━━━━ Gas 费用 ━━━━━━━━
+
+⛽ **Gas Used**: {notification.gas_used:.6f} {chain['symbol']}
+📊 **Gas Price**: {notification.gas_price_gwei:.2f} Gwei
+💸 **Gas 成本**: ${notification.gas_used * notification.gas_price_gwei * 0.000000001 * 3000:.4f} (估)
 """
             
+            # 盈亏信息（卖出时显示）
+            if notification.pnl_percent is not None:
+                pnl_emoji = "📈" if notification.pnl_percent > 0 else "📉" if notification.pnl_percent < 0 else "➡️"
+                pnl_color = "green" if notification.pnl_percent > 0 else "red" if notification.pnl_percent < 0 else "gray"
+                content += f"""
+━━━━━━━━ 盈亏分析 ━━━━━━━━
+
+{pnl_emoji} **收益率**: <font color="{pnl_color}">{notification.pnl_percent:+.2f}%</font>
+"""
+
+            # 信号信息
+            score_emoji = "🔥" if notification.signal_score >= 80 else "⚡" if notification.signal_score >= 60 else "📊"
+            content += f"""
+━━━━━━━━ 信号来源 ━━━━━━━━
+
+{score_emoji} **信号分数**: {notification.signal_score:.0f}/100
+📡 **来源**: {notification.signal_source}
+🔗 **钱包**: `{notification.wallet_address[:6]}...{notification.wallet_address[-4:]}` if notification.wallet_address else 'N/A'
+"""
+
+            # 交易链接
             if notification.tx_hash:
-                # 根据链选择区块浏览器
                 explorer_url = self._get_explorer_url(notification.chain, notification.tx_hash)
-                content += f"\n🔗 [查看交易]({explorer_url})"
+                tx_short = f"{notification.tx_hash[:10]}...{notification.tx_hash[-8:]}"
+                content += f"""
+━━━━━━━━ 区块链验证 ━━━━━━━━
+
+🔗 **交易哈希**: `{tx_short}`
+🌐 **查看详情**: [点击查看]({explorer_url})
+"""
             
+            # 错误信息
             if notification.error_msg:
-                content += f"\n\n⚠️ 错误: {notification.error_msg}"
+                content += f"""
+━━━━━━━━ ⚠️ 错误信息 ━━━━━━━━
+
+❌ {notification.error_msg}
+"""
             
             payload = {
                 "msgtype": "markdown",
@@ -233,57 +296,121 @@ class TradeNotifier:
             return False
     
     async def _send_telegram(self, notification: TradeNotification) -> bool:
-        """发送到Telegram"""
+        """发送到Telegram - 详细版"""
         if not self.telegram_bot_token or not self.telegram_chat_id:
             return False
         
         try:
-            # 构建消息
-            status_emoji = {
-                'success': '✅',
-                'failed': '❌',
-                'pending': '⏳',
-                'executing': '🔄',
-                'partial': '⚠️',
-                'cancelled': '🚫',
+            # 配置映射
+            status_config = {
+                'success': {'emoji': '✅', 'text': 'SUCCESS'},
+                'failed': {'emoji': '❌', 'text': 'FAILED'},
+                'pending': {'emoji': '⏳', 'text': 'PENDING'},
+                'executing': {'emoji': '🔄', 'text': 'EXECUTING'},
+                'partial': {'emoji': '⚠️', 'text': 'PARTIAL'},
+                'cancelled': {'emoji': '🚫', 'text': 'CANCELLED'},
             }
             
-            action_emoji = {
-                'buy': '🟢 BUY',
-                'sell': '🔴 SELL',
-                'swap': '🔄 SWAP',
+            action_config = {
+                'buy': {'emoji': '🟢', 'text': 'BUY'},
+                'sell': {'emoji': '🔴', 'text': 'SELL'},
+                'swap': {'emoji': '🔄', 'text': 'SWAP'},
             }
             
-            emoji = status_emoji.get(notification.status, '📊')
-            action = action_emoji.get(notification.action, notification.action.upper())
+            chain_config = {
+                'ethereum': {'name': 'Ethereum', 'symbol': 'ETH', 'emoji': '💎'},
+                'eth': {'name': 'Ethereum', 'symbol': 'ETH', 'emoji': '💎'},
+                'bsc': {'name': 'BNB Chain', 'symbol': 'BNB', 'emoji': '🟡'},
+                'base': {'name': 'Base', 'symbol': 'ETH', 'emoji': '🔵'},
+                'arbitrum': {'name': 'Arbitrum', 'symbol': 'ETH', 'emoji': '🔷'},
+                'polygon': {'name': 'Polygon', 'symbol': 'MATIC', 'emoji': '🟣'},
+                'solana': {'name': 'Solana', 'symbol': 'SOL', 'emoji': '🟪'},
+            }
             
-            # PnL 显示
-            pnl_text = ""
-            if notification.pnl_percent is not None:
-                pnl_emoji = "📈" if notification.pnl_percent > 0 else "📉"
-                pnl_text = f"\n{pnl_emoji} *PnL:* `{notification.pnl_percent:+.2f}%`"
+            status = status_config.get(notification.status, status_config['pending'])
+            action = action_config.get(notification.action, action_config['buy'])
+            chain = chain_config.get(notification.chain.lower(), {'name': notification.chain, 'symbol': '?', 'emoji': '⛓️'})
             
-            # 构建消息
-            text = f"""{emoji} *Trade Execution*
+            # 时间格式化
+            ts = datetime.fromtimestamp(notification.timestamp / 1000, tz=timezone.utc)
+            time_str = ts.strftime('%Y-%m-%d %H:%M:%S UTC')
+            
+            # 计算交易价值
+            trade_value = notification.amount_in * notification.price_usd if notification.action == 'buy' else notification.amount_out
+            
+            # 合约地址缩写
+            addr_short = f"{notification.token_address[:6]}...{notification.token_address[-4:]}" if notification.token_address and len(notification.token_address) > 10 else notification.token_address or 'N/A'
+            
+            # 钱包地址缩写
+            wallet_short = f"{notification.wallet_address[:6]}...{notification.wallet_address[-4:]}" if notification.wallet_address and len(notification.wallet_address) > 10 else 'N/A'
+            
+            # 构建详细消息
+            text = f"""{status['emoji']} *TRADE EXECUTION - {status['text']}*
 
-*{action}* `{notification.token_symbol}`
-━━━━━━━━━━━━━━━━━━━━
-📍 *Chain:* `{notification.chain.upper()}`
-💰 *Amount:* `{notification.amount_in:.6f}` → `{notification.amount_out:.6f}`
-💵 *Price:* `${notification.price_usd:.6f}`
-⛽ *Gas:* `{notification.gas_used:.4f}` (`{notification.gas_price_gwei:.1f}` Gwei)
-🏪 *DEX:* `{notification.dex}`{pnl_text}
+{action['emoji']} *{action['text']}* `{notification.token_symbol}`
 
-📊 *Score:* `{notification.signal_score:.0f}`
-📡 *Source:* `{notification.signal_source}`
+━━━━━━━ 📋 Trade Info ━━━━━━━
+
+🆔 *Trade ID:* `{notification.trade_id}`
+⏰ *Time:* `{time_str}`
+
+━━━━━━ {chain['emoji']} Blockchain ━━━━━━
+
+⛓️ *Network:* `{chain['name']}`
+🪙 *Token:* `{notification.token_symbol}`
+📋 *Contract:* `{addr_short}`
+
+━━━━━━━ 💰 Amounts ━━━━━━━
+
+📥 *In:* `{notification.amount_in:.6f} {chain['symbol'] if notification.action == 'buy' else notification.token_symbol}`
+📤 *Out:* `{notification.amount_out:.6f} {notification.token_symbol if notification.action == 'buy' else chain['symbol']}`
+💵 *Price:* `${notification.price_usd:.8f}`
+💎 *Value:* `${trade_value:.2f} USD`
+
+━━━━━━━━ ⛽ Gas ━━━━━━━━
+
+🔥 *Used:* `{notification.gas_used:.6f} {chain['symbol']}`
+📊 *Price:* `{notification.gas_price_gwei:.2f} Gwei`
+🏪 *DEX:* `{notification.dex}`
 """
             
+            # 盈亏信息
+            if notification.pnl_percent is not None:
+                pnl_emoji = "📈" if notification.pnl_percent > 0 else "📉" if notification.pnl_percent < 0 else "➡️"
+                text += f"""
+━━━━━━ {pnl_emoji} PnL ━━━━━━
+
+*Return:* `{notification.pnl_percent:+.2f}%`
+"""
+
+            # 信号信息
+            score_emoji = "🔥" if notification.signal_score >= 80 else "⚡" if notification.signal_score >= 60 else "📊"
+            text += f"""
+━━━━━━ {score_emoji} Signal ━━━━━━
+
+📊 *Score:* `{notification.signal_score:.0f}/100`
+📡 *Source:* `{notification.signal_source}`
+👛 *Wallet:* `{wallet_short}`
+"""
+
+            # 交易链接
             if notification.tx_hash:
                 explorer_url = self._get_explorer_url(notification.chain, notification.tx_hash)
-                text += f"\n🔗 [View Transaction]({explorer_url})"
+                tx_short = f"{notification.tx_hash[:10]}...{notification.tx_hash[-8:]}"
+                text += f"""
+━━━━━━ 🔗 Verify ━━━━━━
+
+🔍 *TX:* `{tx_short}`
+🌐 [View on Explorer]({explorer_url})
+"""
             
+            # 错误信息
             if notification.error_msg:
-                text += f"\n\n⚠️ *Error:* `{notification.error_msg}`"
+                text += f"""
+━━━━━ ⚠️ Error ━━━━━
+
+❌ `{notification.error_msg}`
+"""
             
             url = f"https://api.telegram.org/bot{self.telegram_bot_token}/sendMessage"
             payload = {
