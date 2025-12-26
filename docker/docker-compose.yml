@@ -190,7 +190,7 @@ services:
       - ../.env
     volumes:
       - session_data:/app/sessions
-      - ../config.secret:/app/config.secret:ro
+      - ../config.secret:/app/config.secret
     networks:
       - crypto_net
     deploy:
