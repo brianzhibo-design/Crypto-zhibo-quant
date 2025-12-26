@@ -220,14 +220,36 @@ class DEXRouter:
         if not self.w3.is_connected():
             raise ConnectionError(f"无法连接到 {chain} RPC")
         
-        # 初始化钱包
+        # 初始化钱包 (支持加密存储和环境变量)
         self.account: Optional[LocalAccount] = None
-        private_key = os.getenv('TRADING_WALLET_PRIVATE_KEY')
+        private_key = self._get_private_key()
         if private_key:
             if not private_key.startswith('0x'):
                 private_key = '0x' + private_key
             self.account = Account.from_key(private_key)
             logger.info(f"[DEX] 钱包地址: {self.account.address}")
+    
+    def _get_private_key(self) -> Optional[str]:
+        """获取私钥 (支持加密存储和环境变量)"""
+        # 方式1: 尝试从安全密钥管理器获取
+        try:
+            import sys
+            from pathlib import Path
+            sys.path.insert(0, str(Path(__file__).parent.parent))
+            from core.secure_key_manager import SecureKeyManager
+            manager = SecureKeyManager()
+            key = manager.get_private_key()
+            if key:
+                logger.info("[DEX] 从加密存储获取私钥")
+                return key
+        except Exception as e:
+            logger.debug(f"[DEX] 安全密钥管理器不可用: {e}")
+        
+        # 方式2: 回退到环境变量
+        key = os.getenv('TRADING_WALLET_PRIVATE_KEY')
+        if key:
+            logger.warning("[DEX] 从环境变量获取私钥 (不推荐)")
+        return key
         
         # 初始化合约
         self.router_v2 = self.w3.eth.contract(

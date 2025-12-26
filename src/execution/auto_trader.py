@@ -131,16 +131,33 @@ class AutoTrader:
         }
     
     def _init_wallet(self):
-        """初始化钱包"""
-        private_key = os.getenv('TRADING_WALLET_PRIVATE_KEY')
+        """初始化钱包 (支持加密存储和环境变量)"""
+        private_key = None
+        
+        # 方式1: 尝试从安全密钥管理器获取
+        try:
+            from ..core.secure_key_manager import SecureKeyManager
+            manager = SecureKeyManager()
+            private_key = manager.get_private_key()
+            if private_key:
+                logger.info("[AutoTrader] 从加密存储获取私钥")
+        except Exception as e:
+            logger.debug(f"[AutoTrader] 安全密钥管理器不可用: {e}")
+        
+        # 方式2: 回退到环境变量 (向后兼容)
         if not private_key:
-            logger.warning("[AutoTrader] 未设置交易钱包私钥")
+            private_key = os.getenv('TRADING_WALLET_PRIVATE_KEY')
+            if private_key:
+                logger.warning("[AutoTrader] 从环境变量获取私钥 (不推荐)")
+        
+        if not private_key:
+            logger.warning("[AutoTrader] 未找到交易钱包私钥")
             return
         
         try:
             self.wallet = Account.from_key(private_key)
             
-            rpc_url = os.getenv('ETH_RPC_URL')
+            rpc_url = os.getenv('ETHEREUM_RPC_URL') or os.getenv('ETH_RPC_URL')
             if rpc_url:
                 self.w3 = Web3(Web3.HTTPProvider(rpc_url))
                 balance = self.w3.eth.get_balance(self.wallet.address)
