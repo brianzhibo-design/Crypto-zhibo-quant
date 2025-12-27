@@ -29,7 +29,52 @@ BEIJING_TZ = timezone(timedelta(hours=8))
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
+
+# 新上币关键词 (用于判断是否为新币)
+NEW_LISTING_KEYWORDS = [
+    'new trading pair', 'new pair', 'will list', 'listing', 'listed',
+    '新上', '上线', '新增', 'adds', 'added', 'launch', 'launched',
+    'perpetual', 'spot trading', '现货', '合约'
+]
+
+# 已有币对关键词 (价格变动、成交量等)
+EXISTING_PAIR_KEYWORDS = [
+    'price', 'volume', 'surge', 'pump', 'dump', 'spike', 'alert',
+    '价格', '成交量', '暴涨', '暴跌', 'whale', 'transfer', 'moved'
+]
+
+
+def classify_event_type(raw_text: str, source: str) -> tuple:
+    """
+    分类事件类型
+    返回: (event_type, is_new_listing)
+    """
+    text_lower = raw_text.lower() if raw_text else ''
+    source_lower = source.lower() if source else ''
+    
+    # 判断是否为新上币
+    is_new_listing = any(kw in text_lower for kw in NEW_LISTING_KEYWORDS)
+    
+    # 判断是否为鲸鱼/大额转账
+    is_whale = 'whale' in source_lower or 'whale' in text_lower or 'transfer' in text_lower
+    
+    # 判断是否为成交量异常
+    is_volume = 'volume' in source_lower or 'volume' in text_lower or 'spike' in text_lower
+    
+    # 判断是否为价格相关
+    is_price = 'price' in text_lower or 'pump' in text_lower or 'dump' in text_lower
+    
+    if is_new_listing:
+        return ('new_listing', True)
+    elif is_whale:
+        return ('whale_alert', False)
+    elif is_volume:
+        return ('volume_spike', False)
+    elif is_price:
+        return ('price_move', False)
+    else:
+        return ('signal', False)
 
 # 功能模块配置 - 按功能划分
 NODES = {
@@ -161,29 +206,26 @@ def get_events():
                 except:
                     pass
 
-            source = data.get('source', '').lower()
-            if 'whale' in source or 'whale' in data.get('raw_text', '').lower():
-                event_type = 'Whale Alert'
-            elif 'listing' in source or 'new' in data.get('raw_text', '').lower():
-                event_type = 'New Listing'
-            elif 'volume' in source:
-                event_type = 'Volume Spike'
-            else:
-                event_type = 'Smart Money'
+            raw_text = data.get('raw_text', data.get('text', ''))
+            source = data.get('source', '')
+            
+            # 使用分类函数判断事件类型
+            event_type, is_new_listing = classify_event_type(raw_text, source)
 
             events.append({
                 'id': mid,
                 'symbol': symbols or '-',
                 'exchange': data.get('exchange', '-'),
-                'text': data.get('raw_text', data.get('text', ''))[:150],
+                'text': raw_text[:150] if raw_text else '',
                 'ts': data.get('ts', data.get('detected_at', mid.split('-')[0])),
-                'source': data.get('source', '-'),
+                'source': source or '-',
                 'score': data.get('score', '0'),
                 'source_count': data.get('source_count', '1'),
                 'is_super_event': data.get('is_super_event', '0'),
                 'contract_address': data.get('contract_address', ''),
                 'chain': data.get('chain', ''),
-                'type': event_type,
+                'event_type': event_type,
+                'is_new_listing': is_new_listing,
             })
     except:
         pass
@@ -412,23 +454,49 @@ def get_insight():
 
         summary = f"Detected {len(items)} signals across {len(exchanges)} exchanges. Monitoring {len(symbols)} unique tokens in real-time."
 
-        if OPENAI_API_KEY:
+        if CLAUDE_API_KEY:
             try:
-                from openai import OpenAI
-                client = OpenAI(api_key=OPENAI_API_KEY)
-                texts = [f"{d.get('symbols', '')} @ {d.get('exchange', '')}" for _, d in items[:15]]
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
+                import anthropic
+                client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
+                
+                # 构建更详细的信号数据
+                signal_details = []
+                new_listings = []
+                existing_signals = []
+                
+                for _, d in items[:20]:
+                    symbol = d.get('symbols', d.get('symbol', ''))
+                    exchange = d.get('exchange', '')
+                    raw_text = d.get('raw_text', '')[:100]
+                    score = d.get('score', '0')
+                    
+                    event_type, is_new = classify_event_type(raw_text, d.get('source', ''))
+                    
+                    if is_new:
+                        new_listings.append(f"🆕 {symbol} @ {exchange} (评分:{score})")
+                    else:
+                        existing_signals.append(f"📊 {symbol} @ {exchange}: {raw_text[:50]}")
+                
+                prompt = f"""作为加密货币市场分析师，请用中文简洁分析以下信号（50字以内）：
+
+新上币信号 ({len(new_listings)}个):
+{chr(10).join(new_listings[:5]) if new_listings else '暂无'}
+
+已有币对信号 ({len(existing_signals)}个):
+{chr(10).join(existing_signals[:5]) if existing_signals else '暂无'}
+
+请分析市场趋势，重点关注：1) 新上币的交易所分布 2) 热门币种 3) 是否有异常活动"""
+
+                response = client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=150,
                     messages=[
-                        {"role": "system", "content": "You are a crypto market analyst. Summarize trends in 40 words or less. Be specific about tokens and patterns."},
-                        {"role": "user", "content": f"Analyze these signals:\n" + "\n".join(texts)}
-                    ],
-                    max_tokens=100,
-                    temperature=0.3,
+                        {"role": "user", "content": prompt}
+                    ]
                 )
-                summary = response.choices[0].message.content
-            except:
-                pass
+                summary = response.content[0].text
+            except Exception as e:
+                summary = f"AI分析暂时不可用: {str(e)[:50]}"
 
         return jsonify({'summary': summary})
     except:
@@ -1089,16 +1157,31 @@ HTML = '''<!DOCTYPE html>
         
         // 类型中文映射
         const typeMap = {
-            'Whale Alert': '鲸鱼警报',
-            'New Listing': '新币上市',
-            'Volume Spike': '成交量激增',
-            'Signal': '信号',
-            'new_listing': '新币上市',
-            'cex_listing': '交易所上币',
-            'dex_pool': 'DEX新池',
-            'telegram': 'TG信号',
-            'news': '新闻',
-            'whale': '鲸鱼',
+            // 新事件类型
+            'new_listing': '🆕 新上币',
+            'whale_alert': '🐋 鲸鱼警报',
+            'volume_spike': '📈 成交量异常',
+            'price_move': '💹 价格波动',
+            'signal': '📊 已有币对',
+            // 兼容旧类型
+            'Whale Alert': '🐋 鲸鱼警报',
+            'New Listing': '🆕 新上币',
+            'Volume Spike': '📈 成交量异常',
+            'Smart Money': '💰 聪明钱',
+            'cex_listing': '🆕 CEX上币',
+            'dex_pool': '🔄 DEX新池',
+            'telegram': '📱 TG信号',
+            'news': '📰 新闻',
+            'whale': '🐋 鲸鱼',
+        };
+        
+        // 类型样式映射
+        const typeStyles = {
+            'new_listing': { class: 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500/20', icon: 'sparkles' },
+            'whale_alert': { class: 'bg-purple-100 text-purple-700 ring-1 ring-purple-500/20', icon: 'fish' },
+            'volume_spike': { class: 'bg-amber-100 text-amber-700 ring-1 ring-amber-500/20', icon: 'trending-up' },
+            'price_move': { class: 'bg-blue-100 text-blue-700 ring-1 ring-blue-500/20', icon: 'activity' },
+            'signal': { class: 'bg-slate-100 text-slate-600', icon: 'radio' },
         };
 
         async function loadEvents() {
@@ -1125,15 +1208,21 @@ HTML = '''<!DOCTYPE html>
                     }
                     const score = parseFloat(e.score || 0);
                     
-                    let typeClass = 'bg-slate-100 text-slate-500';
-                    let typeIcon = 'radio';
-                    const typeLabel = typeMap[e.type] || typeMap[e.source_type] || e.type || '信号';
+                    // 获取事件类型和样式
+                    const eventType = e.event_type || e.type || 'signal';
+                    const isNewListing = e.is_new_listing === true || e.is_new_listing === 'true';
                     
-                    if (e.type === 'Whale Alert' || e.source_type === 'whale') { typeClass = 'bg-purple-100 text-purple-600'; typeIcon = 'fish'; }
-                    else if (e.type === 'New Listing' || e.source_type === 'cex_listing') { typeClass = 'bg-blue-100 text-blue-600'; typeIcon = 'plus-circle'; }
-                    else if (e.type === 'Volume Spike') { typeClass = 'bg-amber-100 text-amber-600'; typeIcon = 'trending-up'; }
-                    else if (e.source_type === 'dex_pool') { typeClass = 'bg-green-100 text-green-600'; typeIcon = 'droplet'; }
-                    else if (e.source_type === 'telegram') { typeClass = 'bg-sky-100 text-sky-600'; typeIcon = 'send'; }
+                    // 根据事件类型获取样式
+                    const style = typeStyles[eventType] || typeStyles['signal'];
+                    let typeClass = style.class;
+                    let typeIcon = style.icon;
+                    const typeLabel = typeMap[eventType] || typeMap[e.source_type] || '📊 已有币对';
+                    
+                    // 新上币额外高亮
+                    if (isNewListing) {
+                        typeClass = 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500/30 font-semibold';
+                        typeIcon = 'sparkles';
+                    }
 
                     let scoreColor = 'bg-slate-200';
                     if (score > 70) scoreColor = 'bg-emerald-400';
@@ -1393,8 +1482,14 @@ HTML = '''<!DOCTYPE html>
             document.getElementById('detailSymbol').textContent = e.symbol || '-';
             document.getElementById('detailExchange').textContent = e.exchange || '-';
             document.getElementById('detailScore').textContent = parseFloat(e.score || 0).toFixed(0);
-            document.getElementById('detailSource').textContent = typeMap[e.source_type] || e.source || '-';
-            document.getElementById('detailTokenType').textContent = e.token_type || '-';
+            
+            // 显示事件类型（新上币/已有币对）
+            const eventType = e.event_type || e.type || 'signal';
+            const isNew = e.is_new_listing === true || e.is_new_listing === 'true';
+            document.getElementById('detailSource').innerHTML = isNew 
+                ? '<span class="text-emerald-600 font-semibold">🆕 新上币</span>'
+                : `<span>${typeMap[eventType] || typeMap[e.source_type] || '📊 已有币对'}</span>`;
+            document.getElementById('detailTokenType').textContent = isNew ? '新上市代币' : (e.token_type || '已有币对');
             
             const isTradeable = e.is_tradeable === '1' || e.is_tradeable === true;
             document.getElementById('detailTradeable').innerHTML = isTradeable 
