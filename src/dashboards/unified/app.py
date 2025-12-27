@@ -1498,6 +1498,99 @@ def _get_mock_top_tokens():
     ]
 
 
+# ==================== 流动性监控 API ====================
+
+@app.route('/api/liquidity/snapshot')
+def get_liquidity_snapshot():
+    """获取最新流动性快照"""
+    from src.services.liquidity_service import get_liquidity_service
+    
+    r = get_redis()
+    service = get_liquidity_service(r)
+    snapshot = service.get_latest_snapshot()
+    
+    return jsonify({
+        'success': True,
+        'data': snapshot,
+        'timestamp': datetime.now(BEIJING_TZ).isoformat(),
+    })
+
+
+@app.route('/api/liquidity/metrics')
+def get_liquidity_metrics():
+    """获取关键流动性指标"""
+    from src.services.liquidity_service import get_liquidity_service
+    
+    r = get_redis()
+    service = get_liquidity_service(r)
+    metrics = service.get_metrics()
+    
+    return jsonify({
+        'success': True,
+        'data': metrics,
+    })
+
+
+@app.route('/api/liquidity/history')
+def get_liquidity_history():
+    """获取历史流动性数据"""
+    from src.services.liquidity_service import get_liquidity_service
+    
+    days = request.args.get('days', 30, type=int)
+    
+    r = get_redis()
+    service = get_liquidity_service(r)
+    history = service.get_history(days)
+    
+    return jsonify({
+        'success': True,
+        'data': history,
+    })
+
+
+@app.route('/api/liquidity/alerts')
+def get_liquidity_alerts():
+    """获取流动性预警"""
+    from src.services.liquidity_service import get_liquidity_service
+    
+    limit = request.args.get('limit', 20, type=int)
+    
+    r = get_redis()
+    service = get_liquidity_service(r)
+    alerts = service.get_alerts(limit)
+    
+    return jsonify({
+        'success': True,
+        'data': alerts,
+    })
+
+
+@app.route('/api/liquidity/refresh', methods=['POST'])
+def refresh_liquidity():
+    """手动刷新流动性数据"""
+    import asyncio
+    from src.services.liquidity_service import get_liquidity_service
+    
+    r = get_redis()
+    service = get_liquidity_service(r)
+    
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(service.refresh_data())
+        loop.close()
+        
+        return jsonify({
+            'success': True,
+            'data': result,
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+        }), 500
+
+
 @app.route('/api/pairs/<exchange>')
 def get_pairs(exchange):
     """获取指定交易所的交易对（无限制）"""
@@ -2659,6 +2752,9 @@ HTML = '''<!DOCTYPE html>
             <button onclick="switchTab('nodes')" id="tabNodes" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
                 <i data-lucide="server" class="w-4 h-4 inline mr-1.5"></i>节点
             </button>
+            <button onclick="switchTab('liquidity')" id="tabLiquidity" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
+                <i data-lucide="droplets" class="w-4 h-4 inline mr-1.5"></i>流动性
+            </button>
         </div>
 
         <!-- Key Metrics -->
@@ -2836,6 +2932,249 @@ HTML = '''<!DOCTYPE html>
         <!-- Nodes Panel (Hidden by default) -->
         <div id="panelNodes" class="hidden">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="nodesGrid"></div>
+        </div>
+        
+        <!-- 流动性监控面板 -->
+        <div id="panelLiquidity" class="hidden">
+            <!-- 顶部指标卡片 -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="card p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 rounded-xl bg-cyan-50 flex items-center justify-center">
+                            <i data-lucide="droplets" class="w-5 h-5 text-cyan-500"></i>
+                        </div>
+                        <span id="liquidityLevelBadge" class="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full text-xs font-medium">正常</span>
+                    </div>
+                    <div id="liquidityIndex" class="text-2xl font-bold text-slate-800 font-mono">--</div>
+                    <div class="text-xs text-slate-400 mt-1">流动性指数</div>
+                </div>
+                
+                <div class="card p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+                            <i data-lucide="coins" class="w-5 h-5 text-emerald-500"></i>
+                        </div>
+                        <span id="stablecoinChange" class="text-xs font-medium">--</span>
+                    </div>
+                    <div id="stablecoinSupply" class="text-2xl font-bold text-slate-800 font-mono">--</div>
+                    <div class="text-xs text-slate-400 mt-1">稳定币供应</div>
+                </div>
+                
+                <div class="card p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
+                            <i data-lucide="database" class="w-5 h-5 text-violet-500"></i>
+                        </div>
+                        <span id="tvlChange" class="text-xs font-medium">--</span>
+                    </div>
+                    <div id="defiTvl" class="text-2xl font-bold text-slate-800 font-mono">--</div>
+                    <div class="text-xs text-slate-400 mt-1">DeFi TVL</div>
+                </div>
+                
+                <div class="card p-5">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                            <i data-lucide="gauge" class="w-5 h-5 text-amber-500"></i>
+                        </div>
+                        <span id="fearGreedLabel" class="text-xs font-medium">--</span>
+                    </div>
+                    <div id="fearGreedValue" class="text-2xl font-bold text-slate-800 font-mono">--</div>
+                    <div class="text-xs text-slate-400 mt-1">恐惧贪婪指数</div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                <!-- 左侧：流动性详情 -->
+                <div class="xl:col-span-8 flex flex-col gap-6">
+                    <!-- 稳定币分布 -->
+                    <div class="card p-6">
+                        <h3 class="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                            <i data-lucide="pie-chart" class="w-5 h-5 text-emerald-500"></i>
+                            稳定币供应分布
+                        </h3>
+                        <div id="stablecoinChart" class="space-y-3">
+                            <div class="flex items-center gap-3">
+                                <span class="w-12 text-sm font-medium text-slate-600">USDT</span>
+                                <div class="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
+                                    <div id="usdtBar" class="h-full bg-emerald-500 rounded-full transition-all" style="width: 0%"></div>
+                                </div>
+                                <span id="usdtValue" class="w-20 text-sm font-mono text-right text-slate-600">--</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="w-12 text-sm font-medium text-slate-600">USDC</span>
+                                <div class="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
+                                    <div id="usdcBar" class="h-full bg-blue-500 rounded-full transition-all" style="width: 0%"></div>
+                                </div>
+                                <span id="usdcValue" class="w-20 text-sm font-mono text-right text-slate-600">--</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="w-12 text-sm font-medium text-slate-600">DAI</span>
+                                <div class="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
+                                    <div id="daiBar" class="h-full bg-amber-500 rounded-full transition-all" style="width: 0%"></div>
+                                </div>
+                                <span id="daiValue" class="w-20 text-sm font-mono text-right text-slate-600">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- TVL 分布 -->
+                    <div class="card p-6">
+                        <h3 class="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                            <i data-lucide="layers" class="w-5 h-5 text-violet-500"></i>
+                            TVL 链分布
+                        </h3>
+                        <div id="tvlChart" class="space-y-3">
+                            <div class="flex items-center gap-3">
+                                <span class="w-20 text-sm font-medium text-slate-600">Ethereum</span>
+                                <div class="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
+                                    <div id="ethTvlBar" class="h-full bg-indigo-500 rounded-full transition-all" style="width: 0%"></div>
+                                </div>
+                                <span id="ethTvlValue" class="w-16 text-sm font-mono text-right text-slate-600">--</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="w-20 text-sm font-medium text-slate-600">BSC</span>
+                                <div class="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
+                                    <div id="bscTvlBar" class="h-full bg-yellow-500 rounded-full transition-all" style="width: 0%"></div>
+                                </div>
+                                <span id="bscTvlValue" class="w-16 text-sm font-mono text-right text-slate-600">--</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="w-20 text-sm font-medium text-slate-600">Solana</span>
+                                <div class="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
+                                    <div id="solTvlBar" class="h-full bg-purple-500 rounded-full transition-all" style="width: 0%"></div>
+                                </div>
+                                <span id="solTvlValue" class="w-16 text-sm font-mono text-right text-slate-600">--</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="w-20 text-sm font-medium text-slate-600">Arbitrum</span>
+                                <div class="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
+                                    <div id="arbTvlBar" class="h-full bg-sky-500 rounded-full transition-all" style="width: 0%"></div>
+                                </div>
+                                <span id="arbTvlValue" class="w-16 text-sm font-mono text-right text-slate-600">--</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="w-20 text-sm font-medium text-slate-600">Base</span>
+                                <div class="flex-1 h-6 bg-slate-100 rounded-full overflow-hidden">
+                                    <div id="baseTvlBar" class="h-full bg-blue-400 rounded-full transition-all" style="width: 0%"></div>
+                                </div>
+                                <span id="baseTvlValue" class="w-16 text-sm font-mono text-right text-slate-600">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 订单簿深度 -->
+                    <div class="card p-6">
+                        <h3 class="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                            <i data-lucide="bar-chart-2" class="w-5 h-5 text-orange-500"></i>
+                            订单簿深度 (±2%)
+                        </h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="text-slate-500 text-left">
+                                        <th class="pb-3 font-medium">币种</th>
+                                        <th class="pb-3 font-medium text-right">买盘深度</th>
+                                        <th class="pb-3 font-medium text-right">卖盘深度</th>
+                                        <th class="pb-3 font-medium text-right">总深度</th>
+                                        <th class="pb-3 font-medium text-right">价差</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="depthTable">
+                                    <tr class="border-t border-slate-100">
+                                        <td class="py-3 font-medium">BTC</td>
+                                        <td id="btcBidDepth" class="py-3 text-right font-mono">--</td>
+                                        <td id="btcAskDepth" class="py-3 text-right font-mono">--</td>
+                                        <td id="btcTotalDepth" class="py-3 text-right font-mono font-semibold">--</td>
+                                        <td id="btcSpread" class="py-3 text-right font-mono">--</td>
+                                    </tr>
+                                    <tr class="border-t border-slate-100">
+                                        <td class="py-3 font-medium">ETH</td>
+                                        <td id="ethBidDepth" class="py-3 text-right font-mono">--</td>
+                                        <td id="ethAskDepth" class="py-3 text-right font-mono">--</td>
+                                        <td id="ethTotalDepth" class="py-3 text-right font-mono font-semibold">--</td>
+                                        <td id="ethSpread" class="py-3 text-right font-mono">--</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 右侧：衍生品 + 预警 -->
+                <div class="xl:col-span-4 flex flex-col gap-6">
+                    <!-- 衍生品数据 -->
+                    <div class="card p-6">
+                        <h3 class="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                            <i data-lucide="trending-up" class="w-5 h-5 text-rose-500"></i>
+                            衍生品数据
+                        </h3>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500 text-sm">未平仓合约</span>
+                                <span id="openInterest" class="font-mono font-semibold">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500 text-sm">BTC 资金费率</span>
+                                <span id="btcFunding" class="font-mono font-semibold">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500 text-sm">ETH 资金费率</span>
+                                <span id="ethFunding" class="font-mono font-semibold">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500 text-sm">24h 清算量</span>
+                                <span id="liquidations" class="font-mono font-semibold">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 全球市场 -->
+                    <div class="card p-6">
+                        <h3 class="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                            <i data-lucide="globe" class="w-5 h-5 text-blue-500"></i>
+                            全球市场
+                        </h3>
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500 text-sm">总市值</span>
+                                <span id="totalMarketCap" class="font-mono font-semibold">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500 text-sm">BTC 占比</span>
+                                <span id="btcDominance" class="font-mono font-semibold">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500 text-sm">ETH 占比</span>
+                                <span id="ethDominance" class="font-mono font-semibold">--</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-slate-500 text-sm">DEX 24h 交易量</span>
+                                <span id="dexVolume" class="font-mono font-semibold">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 流动性预警 -->
+                    <div class="card p-6">
+                        <h3 class="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                            <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500"></i>
+                            流动性预警
+                        </h3>
+                        <div id="liquidityAlerts" class="space-y-3 max-h-64 overflow-y-auto scrollbar">
+                            <div class="text-center text-slate-400 text-sm py-4">
+                                <i data-lucide="check-circle" class="w-8 h-8 mx-auto mb-2 text-emerald-300"></i>
+                                <p>暂无预警</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 刷新按钮 -->
+                    <button onclick="refreshLiquidity()" class="w-full py-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                        刷新数据
+                    </button>
+                </div>
+            </div>
         </div>
         
         <!-- 巨鲸动态面板 -->
@@ -3424,7 +3763,7 @@ HTML = '''<!DOCTYPE html>
         // Tab switching
         function switchTab(tab) {
             currentTab = tab;
-            ['signals', 'whales', 'trades', 'nodes'].forEach(t => {
+            ['signals', 'whales', 'trades', 'nodes', 'liquidity'].forEach(t => {
                 const panel = document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1));
                 const tabBtn = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
                 if (panel && tabBtn) {
@@ -3443,7 +3782,176 @@ HTML = '''<!DOCTYPE html>
             if (tab === 'trades') loadTrades();
             if (tab === 'nodes') renderNodes();
             if (tab === 'whales') loadWhaleEvents();
+            if (tab === 'liquidity') loadLiquidityData();
             lucide.createIcons();
+        }
+        
+        // ==================== 流动性数据加载 ====================
+        
+        async function loadLiquidityData() {
+            try {
+                const res = await fetch('/api/liquidity/snapshot');
+                const result = await res.json();
+                
+                if (result.success && result.data) {
+                    renderLiquidityData(result.data);
+                }
+            } catch (e) {
+                console.error('加载流动性数据失败:', e);
+            }
+            lucide.createIcons();
+        }
+        
+        function renderLiquidityData(data) {
+            // 流动性指数
+            const indexEl = document.getElementById('liquidityIndex');
+            if (indexEl) {
+                indexEl.textContent = data.liquidity_index?.toFixed(1) || '--';
+            }
+            
+            // 流动性等级徽章
+            const levelBadge = document.getElementById('liquidityLevelBadge');
+            if (levelBadge) {
+                const level = data.liquidity_level || 'normal';
+                const levelColors = {
+                    'extreme_low': 'bg-red-100 text-red-600',
+                    'low': 'bg-orange-100 text-orange-600',
+                    'normal': 'bg-emerald-100 text-emerald-600',
+                    'high': 'bg-sky-100 text-sky-600',
+                    'extreme_high': 'bg-violet-100 text-violet-600',
+                };
+                const levelNames = {
+                    'extreme_low': '极低',
+                    'low': '偏低',
+                    'normal': '正常',
+                    'high': '充裕',
+                    'extreme_high': '极高',
+                };
+                levelBadge.className = `${levelColors[level] || 'bg-slate-100 text-slate-600'} px-2 py-0.5 rounded-full text-xs font-medium`;
+                levelBadge.textContent = levelNames[level] || level;
+            }
+            
+            // 稳定币供应
+            const stableSupply = data.stablecoin_total_supply || 0;
+            document.getElementById('stablecoinSupply').textContent = '$' + formatBillions(stableSupply);
+            
+            // TVL
+            const tvl = data.defi_tvl_total || 0;
+            document.getElementById('defiTvl').textContent = '$' + formatBillions(tvl);
+            
+            // 恐惧贪婪
+            const fng = data.fear_greed_index || 50;
+            document.getElementById('fearGreedValue').textContent = fng;
+            const fngLabel = document.getElementById('fearGreedLabel');
+            if (fngLabel) {
+                const classification = data.fear_greed_classification || 'neutral';
+                const fngColors = {
+                    'extreme_fear': 'text-red-500',
+                    'fear': 'text-orange-500',
+                    'neutral': 'text-slate-500',
+                    'greed': 'text-green-500',
+                    'extreme_greed': 'text-emerald-500',
+                };
+                const fngNames = {
+                    'extreme_fear': '极度恐惧',
+                    'fear': '恐惧',
+                    'neutral': '中性',
+                    'greed': '贪婪',
+                    'extreme_greed': '极度贪婪',
+                };
+                fngLabel.className = `text-xs font-medium ${fngColors[classification] || ''}`;
+                fngLabel.textContent = fngNames[classification] || classification;
+            }
+            
+            // 稳定币分布
+            const usdt = data.usdt_supply || 0;
+            const usdc = data.usdc_supply || 0;
+            const dai = data.dai_supply || 0;
+            const maxStable = Math.max(usdt, usdc, dai, 1);
+            
+            document.getElementById('usdtBar').style.width = (usdt / stableSupply * 100) + '%';
+            document.getElementById('usdtValue').textContent = '$' + formatBillions(usdt);
+            
+            document.getElementById('usdcBar').style.width = (usdc / stableSupply * 100) + '%';
+            document.getElementById('usdcValue').textContent = '$' + formatBillions(usdc);
+            
+            document.getElementById('daiBar').style.width = (dai / stableSupply * 100) + '%';
+            document.getElementById('daiValue').textContent = '$' + formatBillions(dai);
+            
+            // TVL 分布
+            const ethTvl = data.defi_tvl_ethereum || 0;
+            const bscTvl = data.defi_tvl_bsc || 0;
+            const solTvl = data.defi_tvl_solana || 0;
+            const arbTvl = data.defi_tvl_arbitrum || 0;
+            const baseTvl = data.defi_tvl_base || 0;
+            
+            document.getElementById('ethTvlBar').style.width = (ethTvl / tvl * 100) + '%';
+            document.getElementById('ethTvlValue').textContent = '$' + formatBillions(ethTvl);
+            
+            document.getElementById('bscTvlBar').style.width = (bscTvl / tvl * 100) + '%';
+            document.getElementById('bscTvlValue').textContent = '$' + formatBillions(bscTvl);
+            
+            document.getElementById('solTvlBar').style.width = (solTvl / tvl * 100) + '%';
+            document.getElementById('solTvlValue').textContent = '$' + formatBillions(solTvl);
+            
+            document.getElementById('arbTvlBar').style.width = (arbTvl / tvl * 100) + '%';
+            document.getElementById('arbTvlValue').textContent = '$' + formatBillions(arbTvl);
+            
+            document.getElementById('baseTvlBar').style.width = (baseTvl / tvl * 100) + '%';
+            document.getElementById('baseTvlValue').textContent = '$' + formatBillions(baseTvl);
+            
+            // 订单簿深度
+            document.getElementById('btcTotalDepth').textContent = '$' + formatMillions(data.btc_depth_2pct || 0);
+            document.getElementById('ethTotalDepth').textContent = '$' + formatMillions(data.eth_depth_2pct || 0);
+            
+            // 衍生品
+            document.getElementById('openInterest').textContent = '$' + formatBillions(data.futures_oi_total || 0);
+            document.getElementById('btcFunding').textContent = (data.btc_funding_rate || 0).toFixed(4) + '%';
+            document.getElementById('ethFunding').textContent = (data.eth_funding_rate || 0).toFixed(4) + '%';
+            document.getElementById('liquidations').textContent = '$' + formatMillions(data.liquidations_24h || 0);
+            
+            // 全球市场
+            document.getElementById('totalMarketCap').textContent = '$' + formatTrillions(data.total_market_cap || 0);
+            document.getElementById('btcDominance').textContent = (data.btc_dominance || 0).toFixed(1) + '%';
+            document.getElementById('ethDominance').textContent = (data.eth_dominance || 0).toFixed(1) + '%';
+            document.getElementById('dexVolume').textContent = '$' + formatBillions(data.dex_volume_24h || 0);
+        }
+        
+        function formatBillions(value) {
+            if (value >= 1e12) return (value / 1e12).toFixed(2) + 'T';
+            if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
+            if (value >= 1e6) return (value / 1e6).toFixed(1) + 'M';
+            return value.toFixed(0);
+        }
+        
+        function formatMillions(value) {
+            if (value >= 1e9) return (value / 1e9).toFixed(1) + 'B';
+            if (value >= 1e6) return (value / 1e6).toFixed(0) + 'M';
+            if (value >= 1e3) return (value / 1e3).toFixed(0) + 'K';
+            return value.toFixed(0);
+        }
+        
+        function formatTrillions(value) {
+            if (value >= 1e12) return (value / 1e12).toFixed(2) + 'T';
+            return formatBillions(value);
+        }
+        
+        async function refreshLiquidity() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 刷新中...';
+            lucide.createIcons();
+            
+            try {
+                await fetch('/api/liquidity/refresh', { method: 'POST' });
+                await loadLiquidityData();
+            } catch (e) {
+                console.error('刷新失败:', e);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="refresh-cw" class="w-4 h-4"></i> 刷新数据';
+                lucide.createIcons();
+            }
         }
 
         async function loadStatus() {
