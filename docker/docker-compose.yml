@@ -1,9 +1,10 @@
 # ============================================================
 # Crypto Monitor - Docker Compose 主配置
 # ============================================================
-# 4核16GB服务器优化配置
-# 总资源分配: Redis 2GB + 采集器 3GB + 融合引擎 1.5GB + 监控 2GB = ~8.5GB
-# 剩余 7.5GB 给系统和峰值使用
+# 8核16GB服务器 - 高性能配置
+# 目标：充分利用资源，最大化性能
+# 资源分配：Redis 4GB + PostgreSQL 2GB + 采集器 4GB + 融合 2GB + 监控 2GB + Dashboard 1GB = ~15GB
+# 系统预留：1GB
 
 # ============================================================
 # 全局环境变量 (应用到所有服务)
@@ -39,7 +40,7 @@ volumes:
 services:
   
   # ----------------------------------------------------------
-  # Redis 服务
+  # Redis 服务 (高性能配置)
   # ----------------------------------------------------------
   redis:
     image: redis:7-alpine
@@ -48,25 +49,33 @@ services:
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD}
-      --maxmemory 2gb
+      --maxmemory 4gb
       --maxmemory-policy allkeys-lru
       --save 900 1
       --save 300 10
       --appendonly yes
+      --tcp-backlog 511
+      --timeout 0
+      --tcp-keepalive 300
+      --databases 16
+      --io-threads 4
+      --io-threads-do-reads yes
     volumes:
       - redis_data:/data
     networks:
       - crypto_net
     ports:
       - "6379:6379"
+    sysctls:
+      - net.core.somaxconn=1024
     deploy:
       resources:
         limits:
+          memory: 4G
+          cpus: '2.0'
+        reservations:
           memory: 2G
           cpus: '1.0'
-        reservations:
-          memory: 1G
-          cpus: '0.5'
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
@@ -75,7 +84,7 @@ services:
       start_period: 10s
 
   # ----------------------------------------------------------
-  # PostgreSQL 数据库 (持久化存储)
+  # PostgreSQL 数据库 (高性能配置)
   # ----------------------------------------------------------
   postgres:
     image: postgres:15-alpine
@@ -86,8 +95,31 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-crypto}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CryptoMonitor2025}
       POSTGRES_DB: ${POSTGRES_DB:-crypto}
-      # 性能优化
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=1536MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "work_mem=32MB"
+      - "-c"
+      - "max_connections=200"
+      - "-c"
+      - "max_parallel_workers=4"
+      - "-c"
+      - "max_parallel_workers_per_gather=2"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "wal_buffers=16MB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../scripts/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -98,11 +130,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
-          cpus: '0.5'
+          memory: 2G
+          cpus: '2.0'
         reservations:
-          memory: 256M
-          cpus: '0.2'
+          memory: 1G
+          cpus: '1.0'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crypto} -d ${POSTGRES_DB:-crypto}"]
       interval: 10s
@@ -114,7 +146,7 @@ services:
   # 采集器服务
   # ----------------------------------------------------------
   
-  # 国际交易所监控
+  # 国际交易所监控 (高性能)
   exchange-intl:
     build:
       context: ..
@@ -131,6 +163,10 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 高性能配置
+      MAX_CONCURRENT_REQUESTS: 50
+      REQUEST_TIMEOUT: 10
+      POLL_INTERVAL: 3
     env_file:
       - ../.env
     networks:
@@ -138,13 +174,13 @@ services:
     deploy:
       resources:
         limits:
+          memory: 768M
+          cpus: '1.0'
+        reservations:
           memory: 512M
           cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.2'
 
-  # 韩国交易所监控
+  # 韩国交易所监控 (高优先级)
   exchange-kr:
     build:
       context: ..
@@ -161,6 +197,9 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
+      # 韩国所轮询更频繁
+      MAX_CONCURRENT_REQUESTS: 30
+      POLL_INTERVAL: 2
     env_file:
       - ../.env
     networks:
@@ -168,13 +207,13 @@ services:
     deploy:
       resources:
         limits:
+          memory: 768M
+          cpus: '1.0'
+        reservations:
           memory: 512M
           cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.2'
 
-  # 区块链监控
+  # 区块链监控 (多链并行)
   blockchain:
     build:
       context: ..
@@ -197,6 +236,9 @@ services:
       ARBITRUM_RPC_URL: ${ARBITRUM_RPC_URL}
       SOLANA_RPC_URL: ${SOLANA_RPC_URL}
       WALLET_MASTER_PASSWORD: ${WALLET_MASTER_PASSWORD}
+      # 多链并行
+      MAX_CONCURRENT_CHAINS: 5
+      BLOCK_POLL_INTERVAL: 2
     env_file:
       - ../.env
     volumes:
@@ -206,13 +248,13 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
-          cpus: '0.5'
+          memory: 1G
+          cpus: '1.0'
         reservations:
-          memory: 384M
-          cpus: '0.2'
+          memory: 512M
+          cpus: '0.5'
 
-  # Telegram 监控
+  # Telegram 监控 (实时优先)
   telegram:
     build:
       context: ..
@@ -231,6 +273,9 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       TELEGRAM_API_ID: ${TELEGRAM_API_ID}
       TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
+      # 实时监控优化
+      MESSAGE_QUEUE_SIZE: 1000
+      PROCESS_BATCH_SIZE: 50
     env_file:
       - ../.env
     volumes:
@@ -241,11 +286,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
-          cpus: '0.5'
+          memory: 1G
+          cpus: '1.0'
         reservations:
-          memory: 384M
-          cpus: '0.2'
+          memory: 512M
+          cpus: '0.5'
 
   # 新闻监控
   news:
@@ -264,6 +309,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
+      POLL_INTERVAL: 30
     env_file:
       - ../.env
     networks:
@@ -271,14 +317,14 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
-          cpus: '0.3'
+          memory: 512M
+          cpus: '0.5'
         reservations:
-          memory: 192M
-          cpus: '0.1'
+          memory: 256M
+          cpus: '0.2'
 
   # ----------------------------------------------------------
-  # 融合引擎
+  # 融合引擎 (核心决策引擎 - 高性能)
   # ----------------------------------------------------------
   fusion:
     build:
@@ -290,13 +336,20 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
       <<: *common-env
       MODULE_NAME: fusion
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
+      DATABASE_URL: ${DATABASE_URL}
       WALLET_MASTER_PASSWORD: ${WALLET_MASTER_PASSWORD}
+      # 高性能配置
+      EVENT_BATCH_SIZE: 100
+      FUSION_WINDOW_MS: 5000
+      TRIGGER_THRESHOLD: 60
     env_file:
       - ../.env
     volumes:
@@ -306,14 +359,14 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1536M
-          cpus: '1.0'
+          memory: 2G
+          cpus: '2.0'
         reservations:
-          memory: 768M
-          cpus: '0.5'
+          memory: 1G
+          cpus: '1.0'
 
   # ----------------------------------------------------------
-  # 推送服务
+  # 推送服务 (低延迟)
   # ----------------------------------------------------------
   pusher:
     build:
@@ -336,6 +389,9 @@ services:
       WECHAT_WEBHOOK_SIGNAL: ${WECHAT_WEBHOOK_SIGNAL}
       WECHAT_WEBHOOK_TRADE: ${WECHAT_WEBHOOK_TRADE}
       WALLET_MASTER_PASSWORD: ${WALLET_MASTER_PASSWORD}
+      # 推送配置
+      PUSH_BATCH_SIZE: 10
+      PUSH_TIMEOUT: 5
     env_file:
       - ../.env
     volumes:
@@ -345,14 +401,14 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
-          cpus: '0.3'
+          memory: 512M
+          cpus: '0.5'
         reservations:
-          memory: 192M
-          cpus: '0.1'
+          memory: 256M
+          cpus: '0.2'
 
   # ----------------------------------------------------------
-  # Dashboard
+  # Dashboard (高并发支持)
   # ----------------------------------------------------------
   dashboard:
     build:
@@ -365,14 +421,21 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
       <<: *common-env
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
+      DATABASE_URL: ${DATABASE_URL}
       DASHBOARD_PORT: 5000
       WALLET_MASTER_PASSWORD: ${WALLET_MASTER_PASSWORD}
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
+      # Gunicorn 高并发配置
+      GUNICORN_WORKERS: 4
+      GUNICORN_THREADS: 4
+      GUNICORN_TIMEOUT: 120
     env_file:
       - ../.env
     volumes:
@@ -382,17 +445,17 @@ services:
     deploy:
       resources:
         limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
           memory: 512M
           cpus: '0.5'
-        reservations:
-          memory: 256M
-          cpus: '0.2'
 
   # ----------------------------------------------------------
-  # 监控服务
+  # 监控服务 (增强配置)
   # ----------------------------------------------------------
   
-  # Prometheus
+  # Prometheus (高性能时序数据库)
   prometheus:
     image: prom/prometheus:latest
     container_name: crypto-prometheus
@@ -400,8 +463,11 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.time=90d'
+      - '--storage.tsdb.retention.size=10GB'
       - '--web.enable-lifecycle'
+      - '--query.max-concurrency=20'
+      - '--query.timeout=2m'
     environment:
       <<: *common-env
     volumes:
@@ -414,13 +480,13 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
-          cpus: '0.5'
+          memory: 1536M
+          cpus: '1.0'
         reservations:
-          memory: 512M
-          cpus: '0.2'
+          memory: 768M
+          cpus: '0.5'
 
-  # Grafana
+  # Grafana (可视化面板)
   grafana:
     image: grafana/grafana:latest
     container_name: crypto-grafana
@@ -432,22 +498,28 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: http://localhost:3000
+      GF_DATABASE_TYPE: postgres
+      GF_DATABASE_HOST: postgres:5432
+      GF_DATABASE_NAME: crypto
+      GF_DATABASE_USER: ${POSTGRES_USER:-crypto}
+      GF_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-CryptoMonitor2025}
     volumes:
       - grafana_data:/var/lib/grafana
     depends_on:
       - prometheus
+      - postgres
     networks:
       - crypto_net
     deploy:
       resources:
         limits:
-          memory: 512M
-          cpus: '0.3'
+          memory: 768M
+          cpus: '0.5'
         reservations:
-          memory: 256M
-          cpus: '0.1'
+          memory: 384M
+          cpus: '0.2'
 
-  # Redis Exporter (for Prometheus)
+  # Redis Exporter
   redis-exporter:
     image: oliver006/redis_exporter:latest
     container_name: crypto-redis-exporter
@@ -460,6 +532,27 @@ services:
       - "9121:9121"
     depends_on:
       redis:
+        condition: service_healthy
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.1'
+
+  # PostgreSQL Exporter (数据库监控)
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: crypto-postgres-exporter
+    restart: always
+    environment:
+      <<: *common-env
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-crypto}:${POSTGRES_PASSWORD:-CryptoMonitor2025}@postgres:5432/${POSTGRES_DB:-crypto}?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      postgres:
         condition: service_healthy
     networks:
       - crypto_net
