@@ -3099,7 +3099,7 @@ HTML = '''<!DOCTYPE html>
                     </div>
                     
                     <!-- 刷新按钮 -->
-                    <button onclick="refreshLiquidity()" class="w-full py-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
+                    <button onclick="refreshLiquidity(event)" class="w-full py-3 bg-cyan-500 hover:bg-cyan-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
                         <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                         刷新数据
                     </button>
@@ -3831,8 +3831,15 @@ HTML = '''<!DOCTYPE html>
             document.getElementById('baseTvlValue').textContent = '$' + formatBillions(baseTvl);
             
             // 订单簿深度
+            document.getElementById('btcBidDepth').textContent = data.btc_bid_depth ? '$' + formatMillions(data.btc_bid_depth) : '--';
+            document.getElementById('btcAskDepth').textContent = data.btc_ask_depth ? '$' + formatMillions(data.btc_ask_depth) : '--';
             document.getElementById('btcTotalDepth').textContent = '$' + formatMillions(data.btc_depth_2pct || 0);
+            document.getElementById('btcSpread').textContent = data.btc_spread_bps ? data.btc_spread_bps.toFixed(1) + ' bps' : '--';
+            
+            document.getElementById('ethBidDepth').textContent = data.eth_bid_depth ? '$' + formatMillions(data.eth_bid_depth) : '--';
+            document.getElementById('ethAskDepth').textContent = data.eth_ask_depth ? '$' + formatMillions(data.eth_ask_depth) : '--';
             document.getElementById('ethTotalDepth').textContent = '$' + formatMillions(data.eth_depth_2pct || 0);
+            document.getElementById('ethSpread').textContent = data.eth_spread_bps ? data.eth_spread_bps.toFixed(1) + ' bps' : '--';
             
             // 衍生品
             document.getElementById('openInterest').textContent = '$' + formatBillions(data.futures_oi_total || 0);
@@ -3866,17 +3873,32 @@ HTML = '''<!DOCTYPE html>
             return formatBillions(value);
         }
         
-        async function refreshLiquidity() {
-            const btn = event.target;
+        async function refreshLiquidity(event) {
+            // 阻止默认行为，防止页面跳转
+            if (event) event.preventDefault();
+            
+            const btn = document.querySelector('#panelLiquidity button[onclick*="refreshLiquidity"]');
+            if (!btn) return;
+            
             btn.disabled = true;
             btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 刷新中...';
             lucide.createIcons();
             
             try {
-                await fetch('/api/liquidity/refresh', { method: 'POST' });
-                await loadLiquidityData();
+                const res = await fetch('/api/liquidity/refresh', { method: 'POST' });
+                const result = await res.json();
+                
+                if (result.success && result.data) {
+                    // 直接使用刷新返回的数据
+                    renderLiquidityData(result.data);
+                } else {
+                    // 如果刷新失败，尝试重新加载
+                    await loadLiquidityData();
+                }
             } catch (e) {
                 console.error('刷新失败:', e);
+                // 刷新失败时也尝试加载
+                await loadLiquidityData();
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<i data-lucide="refresh-cw" class="w-4 h-4"></i> 刷新数据';

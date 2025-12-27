@@ -202,24 +202,41 @@ class DefiLlamaCollector:
         
         result = StablecoinData()
         
-        if not data or 'peggedAssets' not in data:
+        if not data:
+            logger.warning("DeFiLlama 稳定币 API 返回空数据")
             return result
         
-        stables = data['peggedAssets']
+        # 兼容新旧 API 格式
+        stables = data.get('peggedAssets', [])
+        if not stables and isinstance(data, list):
+            stables = data  # 如果 data 本身就是列表
+        
+        if not stables:
+            logger.warning(f"DeFiLlama 稳定币 API 格式异常: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+            return result
         
         for stable in stables:
             symbol = stable.get('symbol', '').upper()
-            # circulating 是各链的供应量
-            circulating = stable.get('circulating', {})
             
-            # 计算总供应
+            # 尝试多种方式获取供应量
             total = 0
+            
+            # 方式1: circulating 字典
+            circulating = stable.get('circulating', {})
             if isinstance(circulating, dict):
                 total = sum(
                     chain_data.get('peggedUSD', 0) 
                     for chain_data in circulating.values()
                     if isinstance(chain_data, dict)
                 )
+            
+            # 方式2: 直接的 circulating 数值
+            if total == 0:
+                total = stable.get('circulatingPrevDay', {}).get('peggedUSD', 0)
+            
+            # 方式3: mcap 作为备选
+            if total == 0:
+                total = stable.get('mcap', 0)
             
             result.total_supply += total
             
@@ -235,16 +252,19 @@ class DefiLlamaCollector:
             elif symbol == 'TUSD':
                 result.tusd = total
             
-            # 详情
-            result.details.append({
-                'symbol': symbol,
-                'name': stable.get('name', ''),
-                'supply': total,
-                'price': stable.get('price', 1.0),
-            })
+            # 详情（只添加有供应量的）
+            if total > 0:
+                result.details.append({
+                    'symbol': symbol,
+                    'name': stable.get('name', ''),
+                    'supply': total,
+                    'price': stable.get('price', 1.0),
+                })
         
         # 按供应量排序
         result.details = sorted(result.details, key=lambda x: x['supply'], reverse=True)[:10]
+        
+        logger.info(f"稳定币数据采集完成: 总供应=${result.total_supply/1e9:.2f}B, USDT=${result.usdt/1e9:.2f}B")
         
         return result
     

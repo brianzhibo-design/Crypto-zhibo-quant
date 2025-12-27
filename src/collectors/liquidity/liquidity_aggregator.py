@@ -47,7 +47,13 @@ class LiquiditySnapshot:
     
     # 订单簿
     btc_depth_2pct: float = 0
+    btc_bid_depth: float = 0
+    btc_ask_depth: float = 0
+    btc_spread_bps: float = 0
     eth_depth_2pct: float = 0
+    eth_bid_depth: float = 0
+    eth_ask_depth: float = 0
+    eth_spread_bps: float = 0
     avg_spread_bps: float = 0
     
     # 衍生品
@@ -155,6 +161,25 @@ class LiquidityAggregator:
         logger.info("流动性数据采集完成")
         return data
     
+    def _get_depth_side(self, depth: Dict, symbol: str, side: str) -> float:
+        """获取买盘或卖盘深度"""
+        symbol_data = depth.get(symbol, {})
+        exchanges = symbol_data.get('exchanges', [])
+        if not exchanges:
+            return 0
+        
+        # 汇总所有交易所的深度
+        total = sum(
+            e.get('bid_depth' if side == 'bid' else 'ask_depth', 0)
+            for e in exchanges
+        )
+        return total
+    
+    def _get_spread(self, depth: Dict, symbol: str) -> float:
+        """获取价差"""
+        symbol_data = depth.get(symbol, {})
+        return symbol_data.get('avg_spread_bps', 0)
+    
     def create_snapshot(self, data: Dict) -> LiquiditySnapshot:
         """创建流动性快照"""
         now = datetime.now()
@@ -198,7 +223,13 @@ class LiquidityAggregator:
             
             # 订单簿
             btc_depth_2pct=depth.get('btc', {}).get('total_depth', 0),
+            btc_bid_depth=self._get_depth_side(depth, 'btc', 'bid'),
+            btc_ask_depth=self._get_depth_side(depth, 'btc', 'ask'),
+            btc_spread_bps=self._get_spread(depth, 'btc'),
             eth_depth_2pct=depth.get('eth', {}).get('total_depth', 0),
+            eth_bid_depth=self._get_depth_side(depth, 'eth', 'bid'),
+            eth_ask_depth=self._get_depth_side(depth, 'eth', 'ask'),
+            eth_spread_bps=self._get_spread(depth, 'eth'),
             avg_spread_bps=depth.get('avg_spread_bps', 0),
             
             # 衍生品
