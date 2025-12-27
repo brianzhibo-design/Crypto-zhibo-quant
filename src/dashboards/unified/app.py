@@ -1033,49 +1033,54 @@ def find_contract(symbol):
                 'suggestions': ['尝试在 CoinGecko 或区块链浏览器中搜索']
             })
         
-        # 按流动性排序，选择最佳结果
-        results = []
-        seen = set()
+        # 收集所有返回的符号（用于调试）
+        all_symbols = set()
+        exact_matches = []
+        chain_filtered = []
         
-        for pair in pairs[:20]:
+        for pair in pairs:
             base_token = pair.get('baseToken', {})
-            token_symbol = base_token.get('symbol', '').upper()
-            
-            # 匹配代币符号
-            if token_symbol != base_symbol:
-                continue
-            
-            contract = base_token.get('address', '')
+            token_symbol = (base_token.get('symbol', '') or '').upper()
             pair_chain = pair.get('chainId', '')
             
-            # 如果指定了链，只返回该链的结果
-            if chain and pair_chain.lower() != chain.lower():
-                continue
+            all_symbols.add(token_symbol)
             
-            # 去重
-            key = f"{contract}_{pair_chain}"
-            if key in seen:
-                continue
-            seen.add(key)
-            
-            liquidity = pair.get('liquidity', {}).get('usd', 0) or 0
-            volume = pair.get('volume', {}).get('h24', 0) or 0
-            price = pair.get('priceUsd', '0')
-            
-            results.append({
-                'contract_address': contract,
-                'chain': pair_chain,
-                'symbol': token_symbol,
-                'name': base_token.get('name', ''),
-                'liquidity_usd': liquidity,
-                'volume_24h': volume,
-                'price_usd': price,
-                'dex': pair.get('dexId', ''),
-                'pair_address': pair.get('pairAddress', ''),
-            })
+            # 精确匹配符号
+            if token_symbol == base_symbol:
+                contract = base_token.get('address', '')
+                liquidity = pair.get('liquidity', {}).get('usd', 0) or 0
+                
+                exact_matches.append({
+                    'contract_address': contract,
+                    'chain': pair_chain,
+                    'symbol': token_symbol,
+                    'name': base_token.get('name', ''),
+                    'liquidity_usd': liquidity,
+                    'volume_24h': pair.get('volume', {}).get('h24', 0) or 0,
+                    'price_usd': pair.get('priceUsd', '0'),
+                    'dex': pair.get('dexId', ''),
+                    'pair_address': pair.get('pairAddress', ''),
+                })
         
         # 按流动性排序
-        results.sort(key=lambda x: x['liquidity_usd'], reverse=True)
+        exact_matches.sort(key=lambda x: x['liquidity_usd'], reverse=True)
+        
+        # 如果指定了链，过滤结果
+        if chain:
+            chain_filtered = [r for r in exact_matches if r['chain'].lower() == chain.lower()]
+            results = chain_filtered if chain_filtered else exact_matches
+        else:
+            results = exact_matches
+        
+        # 去重
+        seen = set()
+        unique_results = []
+        for r in results:
+            key = f"{r['contract_address']}_{r['chain']}"
+            if key not in seen:
+                seen.add(key)
+                unique_results.append(r)
+        results = unique_results
         
         if results:
             best = results[0]
@@ -1103,13 +1108,26 @@ def find_contract(symbol):
                 'symbol': base_symbol,
                 'best_match': best,
                 'all_results': results[:5],
-                'source': 'dexscreener'
+                'source': 'dexscreener',
+                'debug': {
+                    'total_pairs': len(pairs),
+                    'exact_matches': len(exact_matches),
+                    'chain_filter': chain or 'none',
+                }
             })
         else:
+            # 详细的调试信息
             return jsonify({
                 'found': False,
                 'symbol': base_symbol,
-                'message': f'DexScreener 找到 pairs 但无匹配 {base_symbol}',
+                'message': f'DexScreener 返回 {len(pairs)} 个 pairs，但无精确匹配 {base_symbol}',
+                'debug': {
+                    'total_pairs': len(pairs),
+                    'exact_matches': len(exact_matches),
+                    'returned_symbols': list(all_symbols)[:10],
+                    'chain_filter': chain or 'none',
+                    'available_chains': list(set(m['chain'] for m in exact_matches)) if exact_matches else [],
+                }
             })
             
     except requests.Timeout:
