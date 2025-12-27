@@ -731,6 +731,111 @@ def execute_trade():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/find-contract/<symbol>')
+def find_contract(symbol):
+    """
+    通过代币符号查找合约地址
+    使用 DexScreener API 搜索
+    """
+    import requests
+    
+    if not symbol or len(symbol) < 2:
+        return jsonify({'error': '请提供有效的代币符号'}), 400
+    
+    # 提取基础符号（去除交易对后缀）
+    base_symbol = symbol.upper()
+    for suffix in ['_USDT', '/USDT', '-USDT', 'USDT', '_USD', '/USD', '-USD', 'USD', '_BTC', '/BTC']:
+        if base_symbol.endswith(suffix):
+            base_symbol = base_symbol[:-len(suffix)]
+            break
+    
+    chain = request.args.get('chain', '')
+    
+    try:
+        # 使用 DexScreener API 搜索
+        url = f"https://api.dexscreener.com/latest/dex/search?q={base_symbol}"
+        resp = requests.get(url, timeout=10)
+        
+        if resp.status_code != 200:
+            return jsonify({'error': f'DexScreener API 错误: {resp.status_code}'}), 500
+        
+        data = resp.json()
+        pairs = data.get('pairs', [])
+        
+        if not pairs:
+            return jsonify({
+                'found': False,
+                'symbol': base_symbol,
+                'message': f'DexScreener 未找到 {base_symbol} 的合约地址',
+                'suggestions': ['尝试在 CoinGecko 或区块链浏览器中搜索']
+            })
+        
+        # 按流动性排序，选择最佳结果
+        results = []
+        seen = set()
+        
+        for pair in pairs[:20]:
+            base_token = pair.get('baseToken', {})
+            token_symbol = base_token.get('symbol', '').upper()
+            
+            # 匹配代币符号
+            if token_symbol != base_symbol:
+                continue
+            
+            contract = base_token.get('address', '')
+            pair_chain = pair.get('chainId', '')
+            
+            # 如果指定了链，只返回该链的结果
+            if chain and pair_chain.lower() != chain.lower():
+                continue
+            
+            # 去重
+            key = f"{contract}_{pair_chain}"
+            if key in seen:
+                continue
+            seen.add(key)
+            
+            liquidity = pair.get('liquidity', {}).get('usd', 0) or 0
+            volume = pair.get('volume', {}).get('h24', 0) or 0
+            price = pair.get('priceUsd', '0')
+            
+            results.append({
+                'contract_address': contract,
+                'chain': pair_chain,
+                'symbol': token_symbol,
+                'name': base_token.get('name', ''),
+                'liquidity_usd': liquidity,
+                'volume_24h': volume,
+                'price_usd': price,
+                'dex': pair.get('dexId', ''),
+                'pair_address': pair.get('pairAddress', ''),
+            })
+        
+        # 按流动性排序
+        results.sort(key=lambda x: x['liquidity_usd'], reverse=True)
+        
+        if results:
+            best = results[0]
+            return jsonify({
+                'found': True,
+                'symbol': base_symbol,
+                'best_match': best,
+                'all_results': results[:5],
+                'source': 'dexscreener'
+            })
+        else:
+            return jsonify({
+                'found': False,
+                'symbol': base_symbol,
+                'message': f'DexScreener 找到 pairs 但无匹配 {base_symbol}',
+            })
+            
+    except requests.Timeout:
+        return jsonify({'error': 'DexScreener 请求超时'}), 504
+    except Exception as e:
+        return jsonify({'error': f'查询失败: {str(e)}'}), 500
+
+
 @app.route('/api/event/<event_id>')
 def get_event_detail(event_id):
     """获取单个事件详情"""
@@ -1203,6 +1308,9 @@ HTML = '''<!DOCTYPE html>
                 </button>
                 <button onclick="copyContract()" class="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-medium transition-colors flex items-center gap-2">
                     <i data-lucide="copy" class="w-4 h-4"></i> 复制合约
+                </button>
+                <button id="findContractBtn" onclick="findContract()" class="py-3 px-4 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-xl font-medium transition-colors flex items-center gap-2">
+                    <i data-lucide="search" class="w-4 h-4"></i> 查找合约
                 </button>
                 <a id="detailLink" href="#" target="_blank" class="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-medium transition-colors flex items-center gap-2">
                     <i data-lucide="external-link" class="w-4 h-4"></i>
@@ -1735,6 +1843,7 @@ HTML = '''<!DOCTYPE html>
             const e = currentEvents[idx];
             if (!e) return;
             currentDetailEvent = e;
+            currentEventData = e;  // 设置当前事件数据用于查找合约
             
             const modal = document.getElementById('eventDetailModal');
             modal.classList.remove('hidden');
@@ -1830,10 +1939,76 @@ HTML = '''<!DOCTYPE html>
         
         function copyContract() {
             const contract = document.getElementById('detailContract').textContent;
-            if (contract && contract !== '-') {
+            if (contract && contract !== '-' && !contract.includes('暂无')) {
                 navigator.clipboard.writeText(contract).then(() => {
                     alert('合约地址已复制!');
                 });
+            } else {
+                alert('暂无合约地址可复制');
+            }
+        }
+        
+        // 当前事件数据（用于查找合约）
+        let currentEventData = null;
+        
+        async function findContract() {
+            if (!currentEventData) {
+                alert('请先选择一个事件');
+                return;
+            }
+            
+            const symbol = currentEventData.symbol || '';
+            if (!symbol) {
+                alert('该事件没有代币符号');
+                return;
+            }
+            
+            const btn = document.getElementById('findContractBtn');
+            const contractEl = document.getElementById('detailContract');
+            
+            // 显示加载状态
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> 查询中...';
+            lucide.createIcons();
+            
+            try {
+                const chain = currentEventData.chain || '';
+                const url = `/api/find-contract/${encodeURIComponent(symbol)}${chain ? '?chain=' + chain : ''}`;
+                const resp = await fetch(url);
+                const data = await resp.json();
+                
+                if (data.found && data.best_match) {
+                    const match = data.best_match;
+                    contractEl.textContent = match.contract_address;
+                    contractEl.classList.remove('text-slate-400');
+                    contractEl.classList.add('text-emerald-600');
+                    
+                    // 更新事件数据
+                    currentEventData.contract_address = match.contract_address;
+                    currentEventData.chain = match.chain;
+                    document.getElementById('detailChain').textContent = match.chain || '-';
+                    
+                    // 显示详情
+                    const info = `✅ 找到合约地址！\\n\\n` +
+                        `链: ${match.chain}\\n` +
+                        `流动性: $${Number(match.liquidity_usd || 0).toLocaleString()}\\n` +
+                        `24h交易量: $${Number(match.volume_24h || 0).toLocaleString()}\\n` +
+                        `价格: $${match.price_usd}\\n` +
+                        `DEX: ${match.dex}\\n\\n` +
+                        `合约: ${match.contract_address}`;
+                    alert(info);
+                } else {
+                    contractEl.textContent = '未找到（可尝试其他来源）';
+                    contractEl.classList.add('text-amber-500');
+                    alert(data.message || '未找到合约地址，请尝试在 CoinGecko 或区块链浏览器中搜索');
+                }
+            } catch (e) {
+                console.error('查找合约失败:', e);
+                alert('查询失败: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i> 查找合约';
+                lucide.createIcons();
             }
         }
         
