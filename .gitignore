@@ -36,5 +36,9 @@ data/redis_snapshots/
 *.session
 config.secret/*.session
 
-# Docker env (可能包含敏感信息)
+# 环境变量文件 (包含敏感信息，禁止上传)
+.env
 docker/.env
+config.secret/.env
+*.env.local
+*.env.production
