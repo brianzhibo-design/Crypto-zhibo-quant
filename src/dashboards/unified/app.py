@@ -707,24 +707,94 @@ def get_whale_dynamics():
         whale_events = r.xrevrange('whales:dynamics', count=limit * 2)
         
         for mid, data in whale_events:
+            # 解析时间戳 (兼容多种格式)
+            timestamp = now_ms()
+            if data.get('timestamp'):
+                try:
+                    timestamp = int(data.get('timestamp', now_ms()))
+                except:
+                    pass
+            
+            # 解析 USD 金额 (兼容 "$1,234" 和 1234 两种格式)
+            amount_usd = 0
+            value_usd_str = data.get('value_usd', '') or data.get('amount_usd', '0')
+            try:
+                if isinstance(value_usd_str, str):
+                    amount_usd = float(value_usd_str.replace('$', '').replace(',', ''))
+                else:
+                    amount_usd = float(value_usd_str)
+            except:
+                try:
+                    amount_usd = float(data.get('value_usd_raw', 0))
+                except:
+                    pass
+            
+            # 解析代币数量
+            amount_token = 0
+            amount_str = data.get('amount', '0')
+            try:
+                if isinstance(amount_str, str):
+                    # 处理 "1.5M" 这样的格式
+                    if 'M' in amount_str.upper():
+                        amount_token = float(amount_str.upper().replace('M', '')) * 1000000
+                    elif 'K' in amount_str.upper():
+                        amount_token = float(amount_str.upper().replace('K', '')) * 1000
+                    else:
+                        amount_token = float(amount_str)
+                else:
+                    amount_token = float(amount_str)
+            except:
+                pass
+            
+            # 映射动作标签
+            action = data.get('action', 'unknown')
+            action_label_map = {
+                'receive': '转入',
+                'send': '转出',
+                'buy': '买入',
+                'sell': '卖出',
+                'withdraw_from_exchange': '从交易所提币',
+                'deposit_to_exchange': '转入交易所',
+            }
+            
+            # 映射类别标签
+            category = data.get('category', 'unknown')
+            category_label_map = {
+                'smart_money': '聪明钱',
+                'whale': '巨鲸',
+                'exchange': '交易所',
+                'market_maker': '做市商',
+                'vc': '风投',
+                'institution': '机构',
+                'project': '项目方',
+            }
+            
+            # 构建描述
+            address_label = data.get('address_label', '') or data.get('address_name', '未知')
+            token_symbol = data.get('token', '') or data.get('token_symbol', 'ETH')
+            description = f"{address_label} {action_label_map.get(action, action)} {amount_str} {token_symbol}"
+            if amount_usd > 0:
+                description += f" (${amount_usd:,.0f})"
+            
             event = {
                 'id': mid,
-                'timestamp': int(data.get('timestamp', now_ms())),
-                'source': data.get('source', 'unknown'),
+                'timestamp': timestamp,
+                'source': data.get('source', 'etherscan'),
                 'address': data.get('address', ''),
-                'address_label': data.get('address_label', 'unknown'),
-                'address_label_cn': data.get('address_label_cn', '未知'),
-                'address_name': data.get('address_name', ''),
-                'action': data.get('action', 'unknown'),
-                'token_symbol': data.get('token_symbol', ''),
-                'amount_usd': float(data.get('amount_usd', 0)),
-                'amount_token': float(data.get('amount_token', 0)),
-                'exchange_or_dex': data.get('exchange_or_dex', ''),
+                'address_label': category_label_map.get(category, category),
+                'address_label_cn': category_label_map.get(category, category),
+                'address_name': address_label,
+                'action': action,
+                'token_symbol': token_symbol,
+                'amount_usd': amount_usd,
+                'amount_token': amount_token,
+                'exchange_or_dex': data.get('counter_label', '') or data.get('exchange_or_dex', ''),
                 'tx_hash': data.get('tx_hash', ''),
                 'chain': data.get('chain', 'ethereum'),
-                'description': data.get('description', data.get('raw_text', '')),
+                'description': description,
                 'related_listing': data.get('related_listing', ''),
-                'priority': int(data.get('priority', 3)),
+                'priority': int(data.get('priority', 3) or 3),
+                'category': category,
             }
             
             # 过滤
@@ -737,6 +807,8 @@ def get_whale_dynamics():
                 
     except Exception as e:
         logger.error(f"获取巨鲸动态失败: {e}")
+        import traceback
+        traceback.print_exc()
     
     # 如果没有真实数据，返回模拟数据用于 UI 展示
     if not events:
@@ -747,41 +819,146 @@ def get_whale_dynamics():
 
 @app.route('/api/smart-money-stats')
 def get_smart_money_stats():
-    """获取 Smart Money 统计数据"""
+    """获取 Smart Money 统计数据 - 从 whales:dynamics 流实时计算"""
     r = get_redis()
     if not r:
         return jsonify({})
     
     try:
-        # 从 Redis 获取统计数据
-        stats = r.hgetall('stats:smart_money') or {}
+        # 先尝试从缓存获取（1分钟缓存）
+        cached = r.get('cache:smart_money_stats')
+        if cached:
+            try:
+                return jsonify(json.loads(cached))
+            except:
+                pass
         
-        # 获取 Top 代币
-        top_tokens_raw = r.zrevrange('smart_money:top_tokens', 0, 4, withscores=True) or []
-        top_tokens = []
-        for symbol, score in top_tokens_raw:
-            token_stats = r.hgetall(f'smart_money:token:{symbol}') or {}
-            top_tokens.append({
-                'symbol': symbol,
-                'net_buy_usd': float(token_stats.get('net_buy_usd', score)),
-                'buy_address_count': int(token_stats.get('buy_address_count', 0)),
-                'price_change_24h': float(token_stats.get('price_change_24h', 0)),
+        # 从 whales:dynamics 流计算统计数据
+        whale_events = r.xrevrange('whales:dynamics', count=500)
+        
+        if not whale_events:
+            # 没有数据时返回默认值
+            return jsonify({
+                'total_buy_usd': 0,
+                'total_sell_usd': 0,
+                'net_flow_usd': 0,
+                'active_addresses': 0,
+                'top_tokens': [],
+                'category_stats': {},
             })
         
-        return jsonify({
-            'total_buy_usd': float(stats.get('total_buy_usd', 0)),
-            'total_sell_usd': float(stats.get('total_sell_usd', 0)),
-            'net_flow_usd': float(stats.get('net_flow_usd', 0)),
-            'active_addresses': int(stats.get('active_addresses', 0)),
+        total_buy = 0
+        total_sell = 0
+        active_addresses = set()
+        token_stats = {}  # {symbol: {'buy': 0, 'sell': 0, 'count': 0, 'addresses': set()}}
+        category_stats = {}  # {category: count}
+        
+        # 24小时前的时间戳
+        day_ago_ms = now_ms() - 24 * 60 * 60 * 1000
+        
+        for mid, data in whale_events:
+            try:
+                # 解析时间戳
+                timestamp = int(data.get('timestamp', '0') or '0')
+                
+                # 只统计24小时内的数据
+                if timestamp < day_ago_ms:
+                    continue
+                
+                # 解析 USD 价值
+                value_usd_str = data.get('value_usd', '$0')
+                value_usd = 0
+                if value_usd_str:
+                    # 尝试解析 "$1,234,567" 格式
+                    try:
+                        if isinstance(value_usd_str, str):
+                            value_usd = float(value_usd_str.replace('$', '').replace(',', ''))
+                        else:
+                            value_usd = float(value_usd_str)
+                    except:
+                        # 尝试从 value_usd_raw 获取
+                        try:
+                            value_usd = float(data.get('value_usd_raw', 0))
+                        except:
+                            pass
+                
+                action = data.get('action', '')
+                address = data.get('address', '')
+                token = data.get('token', 'ETH')
+                category = data.get('category', 'unknown')
+                
+                # 记录活跃地址
+                if address:
+                    active_addresses.add(address.lower())
+                
+                # 统计买卖
+                if action in ['receive', 'buy', 'withdraw_from_exchange']:
+                    total_buy += value_usd
+                elif action in ['send', 'sell', 'deposit_to_exchange']:
+                    total_sell += value_usd
+                
+                # 统计代币
+                if token and token != 'UNKNOWN':
+                    if token not in token_stats:
+                        token_stats[token] = {'buy': 0, 'sell': 0, 'count': 0, 'addresses': set()}
+                    token_stats[token]['count'] += 1
+                    if address:
+                        token_stats[token]['addresses'].add(address.lower())
+                    if action in ['receive', 'buy', 'withdraw_from_exchange']:
+                        token_stats[token]['buy'] += value_usd
+                    else:
+                        token_stats[token]['sell'] += value_usd
+                
+                # 统计分类
+                if category:
+                    category_stats[category] = category_stats.get(category, 0) + 1
+                    
+            except Exception as e:
+                logger.debug(f"解析巨鲸事件出错: {e}")
+                continue
+        
+        # 计算 Top 5 代币（按净买入排序）
+        top_tokens = []
+        sorted_tokens = sorted(
+            token_stats.items(),
+            key=lambda x: x[1]['buy'] - x[1]['sell'],
+            reverse=True
+        )[:5]
+        
+        for symbol, stats in sorted_tokens:
+            top_tokens.append({
+                'symbol': symbol,
+                'net_buy_usd': stats['buy'] - stats['sell'],
+                'buy_address_count': len(stats['addresses']),
+                'price_change_24h': 0,  # 需要从价格 API 获取
+            })
+        
+        result = {
+            'total_buy_usd': total_buy,
+            'total_sell_usd': total_sell,
+            'net_flow_usd': total_buy - total_sell,
+            'active_addresses': len(active_addresses),
             'top_tokens': top_tokens if top_tokens else _get_mock_top_tokens(),
-        })
+            'category_stats': category_stats,
+        }
+        
+        # 缓存结果（1分钟）
+        try:
+            r.setex('cache:smart_money_stats', 60, json.dumps(result))
+        except:
+            pass
+        
+        return jsonify(result)
+        
     except Exception as e:
         logger.error(f"获取 Smart Money 统计失败: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
-            'total_buy_usd': 12500000,
-            'total_sell_usd': 8300000,
-            'net_flow_usd': 4200000,
-            'active_addresses': 23,
+            'total_buy_usd': 0,
+            'total_sell_usd': 0,
+            'net_flow_usd': 0,
+            'active_addresses': 0,
             'top_tokens': _get_mock_top_tokens(),
         })
 
