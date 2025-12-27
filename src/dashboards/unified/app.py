@@ -327,6 +327,15 @@ def get_events():
             elif source_display == 'kr_market':
                 source_display = '韩国交易所'
             
+            # 解析 score_detail JSON（如果存在）
+            score_detail = {}
+            try:
+                score_detail_raw = data.get('score_detail', '{}')
+                if score_detail_raw:
+                    score_detail = json.loads(score_detail_raw)
+            except:
+                pass
+            
             events.append({
                 'id': mid,
                 'symbol': symbols or '-',
@@ -343,6 +352,17 @@ def get_events():
                 'chain': data.get('chain', '') or 'unknown',
                 'event_type': event_type,
                 'is_new_coin': is_new_coin,  # 真正的新币上市
+                # v4 评分明细
+                'base_score': data.get('base_score', score_detail.get('base', 0)),
+                'event_score': data.get('event_score', score_detail.get('event_score', 0)),
+                'exchange_multiplier': data.get('exchange_multiplier', score_detail.get('exchange_mult', 1)),
+                'freshness_multiplier': data.get('freshness_multiplier', score_detail.get('fresh_mult', 1)),
+                'multi_bonus': data.get('multi_source_bonus', score_detail.get('multi_bonus', 0)),
+                'korean_bonus': data.get('korean_bonus', 0),
+                'classified_source': data.get('classified_source', score_detail.get('classified_source', '')),
+                'should_trigger': data.get('should_trigger', '0') == '1',
+                'trigger_reason': data.get('trigger_reason', ''),
+                'exchange_count': data.get('exchange_count', '1'),
             })
     except:
         pass
@@ -1108,6 +1128,15 @@ def get_event_detail(event_id):
     try:
         # 从 fused 流中查找
         for mid, data in r.xrange('events:fused', event_id, event_id):
+            # 解析 score_detail JSON（如果存在）
+            score_detail = {}
+            try:
+                score_detail_raw = data.get('score_detail', '{}')
+                if score_detail_raw:
+                    score_detail = json.loads(score_detail_raw)
+            except:
+                pass
+            
             return jsonify({
                 'id': mid,
                 'symbol': data.get('symbols', ''),
@@ -1121,6 +1150,18 @@ def get_event_detail(event_id):
                 'raw_text': data.get('raw_text', ''),
                 'url': data.get('url', ''),
                 'timestamp': data.get('ts', ''),
+                # v4 评分明细
+                'base_score': float(data.get('base_score', score_detail.get('base', 0)) or 0),
+                'event_score': float(data.get('event_score', score_detail.get('event_score', 0)) or 0),
+                'exchange_multiplier': float(data.get('exchange_multiplier', score_detail.get('exchange_mult', 1)) or 1),
+                'freshness_multiplier': float(data.get('freshness_multiplier', score_detail.get('fresh_mult', 1)) or 1),
+                'multi_bonus': float(data.get('multi_source_bonus', score_detail.get('multi_bonus', 0)) or 0),
+                'korean_bonus': float(data.get('korean_bonus', 0) or 0),
+                'classified_source': data.get('classified_source', score_detail.get('classified_source', '')),
+                'should_trigger': data.get('should_trigger', '0') == '1',
+                'trigger_reason': data.get('trigger_reason', ''),
+                'source_count': data.get('source_count', '1'),
+                'exchange_count': data.get('exchange_count', '1'),
             })
         return jsonify({'error': '事件未找到'}), 404
     except Exception as e:

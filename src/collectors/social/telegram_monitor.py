@@ -213,6 +213,11 @@ async def message_handler(event):
             # 判断消息类型
             event_type = determine_event_type(text, category, matched_keywords)
             
+            # 记录消息原始时间和检测时间
+            msg_time = event.message.date.timestamp() if event.message.date else time.time()
+            detect_time = time.time()
+            delay_seconds = detect_time - msg_time
+            
             event_data = {
                 'source': 'social_telegram',
                 'source_type': 'telegram',
@@ -220,15 +225,22 @@ async def message_handler(event):
                 'channel_id': str(chat_id),
                 'category': category,
                 'text': text[:1500],  # 增加文本长度
+                'raw_text': text[:1500],  # 兼容 raw_text 字段
                 'symbols': json.dumps(symbols),
                 'matched_keywords': json.dumps(matched_keywords),
                 'signal_priority': str(signal_priority),
                 'event_type': event_type,
-                'timestamp': str(int(time.time())),
+                'timestamp': str(int(detect_time)),
+                'msg_timestamp': str(int(msg_time)),  # 消息原始时间
+                'delay_seconds': str(int(delay_seconds)),  # 延迟秒数
                 'contract_address': contract_address,
                 'chain': chain,
                 'is_exchange_official': '1' if is_exchange_channel else '0',
             }
+            
+            # 如果延迟超过 10 秒，记录警告
+            if delay_seconds > 10:
+                logger.warning(f"[DELAY] {chat_name} 消息延迟 {delay_seconds:.1f}s")
             
             redis_client.push_event('events:raw', event_data)
             stats['events'] += 1
