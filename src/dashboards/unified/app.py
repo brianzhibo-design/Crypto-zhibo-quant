@@ -523,6 +523,7 @@ def get_metrics():
 
 @app.route('/api/pairs/<exchange>')
 def get_pairs(exchange):
+    """获取指定交易所的交易对（无限制）"""
     r = get_redis()
     if not r:
         return jsonify({'error': 'Redis disconnected'}), 500
@@ -533,12 +534,333 @@ def get_pairs(exchange):
     search = request.args.get('q', '').upper()
     if search:
         pairs = [p for p in pairs if search in p.upper()]
+    
+    # 获取分页参数
+    limit = request.args.get('limit', type=int)
+    offset = request.args.get('offset', 0, type=int)
+    
+    total = len(pairs)
+    if limit:
+        pairs = pairs[offset:offset + limit]
 
     return jsonify({
         'exchange': exchange,
-        'total': len(pairs),
-        'pairs': pairs[:200]
+        'total': total,
+        'offset': offset,
+        'pairs': pairs  # 不再限制 200
     })
+
+
+@app.route('/api/tokens')
+def get_all_tokens():
+    """
+    获取所有代币（融合不同交易所的相同币种）
+    
+    功能：
+    1. 合并所有交易所的交易对
+    2. 提取基础符号，统计每个币种在多少交易所上线
+    3. 按流动性/交易所数量排序
+    4. 支持按板块筛选
+    """
+    import requests as http_requests
+    
+    r = get_redis()
+    if not r:
+        return jsonify({'error': 'Redis disconnected'}), 500
+    
+    # 所有交易所
+    exchanges = ['binance', 'okx', 'bybit', 'upbit', 'coinbase', 'gate', 'kucoin', 
+                 'bitget', 'mexc', 'bithumb', 'htx', 'kraken', 'coinone', 'korbit']
+    
+    # 收集所有交易对
+    token_map = {}  # symbol -> {exchanges: [], pairs: [], ...}
+    
+    for ex in exchanges:
+        pairs = r.smembers(f'known_pairs:{ex}') or set()
+        for pair in pairs:
+            # 提取基础符号
+            base_symbol = pair.upper()
+            for suffix in ['_USDT', '/USDT', '-USDT', 'USDT', '_USD', '/USD', '-USD', 
+                          'USD', '_BTC', '/BTC', '-BTC', 'BTC', '_ETH', '/ETH', '-ETH',
+                          '_KRW', '-KRW', '/KRW', 'KRW']:
+                if base_symbol.endswith(suffix):
+                    base_symbol = base_symbol[:-len(suffix)]
+                    break
+            
+            # 过滤掉太短或太长的符号
+            if len(base_symbol) < 2 or len(base_symbol) > 15:
+                continue
+            
+            # 过滤稳定币
+            stablecoins = {'USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'USDP', 'GUSD', 'FRAX', 'LUSD'}
+            if base_symbol in stablecoins:
+                continue
+            
+            if base_symbol not in token_map:
+                token_map[base_symbol] = {
+                    'symbol': base_symbol,
+                    'exchanges': [],
+                    'pairs': [],
+                    'tier_s_count': 0,
+                    'tier_a_count': 0,
+                    'tier_b_count': 0,
+                    'weight_score': 0,
+                }
+            
+            if ex not in token_map[base_symbol]['exchanges']:
+                token_map[base_symbol]['exchanges'].append(ex)
+                token_map[base_symbol]['pairs'].append({'exchange': ex, 'pair': pair})
+                
+                # 计算权重
+                ex_info = EXCHANGE_WEIGHTS.get(ex, {'tier': 'C', 'weight': 1})
+                token_map[base_symbol]['weight_score'] += ex_info['weight']
+                if ex_info['tier'] == 'S':
+                    token_map[base_symbol]['tier_s_count'] += 1
+                elif ex_info['tier'] == 'A':
+                    token_map[base_symbol]['tier_a_count'] += 1
+                elif ex_info['tier'] == 'B':
+                    token_map[base_symbol]['tier_b_count'] += 1
+    
+    # 获取合约信息
+    for symbol, data in token_map.items():
+        contract_data = r.hgetall(f'contracts:{symbol}')
+        if contract_data:
+            data['contract_address'] = contract_data.get('contract_address', '')
+            data['chain'] = contract_data.get('chain', '')
+            data['liquidity_usd'] = float(contract_data.get('liquidity_usd', 0) or 0)
+            data['dex'] = contract_data.get('dex', '')
+        else:
+            data['contract_address'] = ''
+            data['chain'] = ''
+            data['liquidity_usd'] = 0
+            data['dex'] = ''
+        
+        data['exchange_count'] = len(data['exchanges'])
+    
+    # 转换为列表
+    tokens = list(token_map.values())
+    
+    # 筛选参数
+    search = request.args.get('q', '').upper()
+    min_exchanges = request.args.get('min_exchanges', 0, type=int)
+    tier = request.args.get('tier', '')  # S, A, B, C
+    sort_by = request.args.get('sort', 'weight_score')  # weight_score, exchange_count, liquidity_usd
+    
+    if search:
+        tokens = [t for t in tokens if search in t['symbol']]
+    
+    if min_exchanges > 0:
+        tokens = [t for t in tokens if t['exchange_count'] >= min_exchanges]
+    
+    if tier == 'S':
+        tokens = [t for t in tokens if t['tier_s_count'] > 0]
+    elif tier == 'A':
+        tokens = [t for t in tokens if t['tier_a_count'] > 0 or t['tier_s_count'] > 0]
+    elif tier == 'B':
+        tokens = [t for t in tokens if t['tier_b_count'] > 0]
+    
+    # 排序
+    if sort_by == 'exchange_count':
+        tokens.sort(key=lambda x: (-x['exchange_count'], -x['weight_score']))
+    elif sort_by == 'liquidity_usd':
+        tokens.sort(key=lambda x: -x['liquidity_usd'])
+    else:  # weight_score
+        tokens.sort(key=lambda x: (-x['weight_score'], -x['exchange_count']))
+    
+    # 分页
+    limit = request.args.get('limit', type=int)
+    offset = request.args.get('offset', 0, type=int)
+    
+    total = len(tokens)
+    if limit:
+        tokens = tokens[offset:offset + limit]
+    
+    # 统计
+    stats = {
+        'total_tokens': total,
+        'multi_exchange': len([t for t in token_map.values() if t['exchange_count'] >= 2]),
+        'tier_s': len([t for t in token_map.values() if t['tier_s_count'] > 0]),
+        'with_contract': len([t for t in token_map.values() if t.get('contract_address')]),
+    }
+    
+    return jsonify({
+        'total': total,
+        'offset': offset,
+        'stats': stats,
+        'tokens': tokens
+    })
+
+
+@app.route('/api/pairs/stats')
+def get_pairs_stats():
+    """获取交易对统计信息"""
+    r = get_redis()
+    if not r:
+        return jsonify({'error': 'Redis disconnected'}), 500
+    
+    exchanges = ['binance', 'okx', 'bybit', 'upbit', 'coinbase', 'gate', 'kucoin', 
+                 'bitget', 'mexc', 'bithumb', 'htx', 'kraken', 'coinone', 'korbit']
+    
+    stats = {}
+    total = 0
+    
+    for ex in exchanges:
+        count = r.scard(f'known_pairs:{ex}') or 0
+        stats[ex] = {
+            'count': count,
+            'tier': EXCHANGE_WEIGHTS.get(ex, {}).get('tier', 'C'),
+            'name': EXCHANGE_WEIGHTS.get(ex, {}).get('name', ex.title()),
+        }
+        total += count
+    
+    return jsonify({
+        'total': total,
+        'exchanges': len([s for s in stats.values() if s['count'] > 0]),
+        'by_exchange': stats,
+        'updated_at': int(time.time() * 1000),
+    })
+
+
+@app.route('/api/ticker/<exchange>/<symbol>')
+def get_ticker(exchange, symbol):
+    """获取实时行情"""
+    import requests as http_requests
+    
+    TICKER_APIS = {
+        'binance': {
+            'url': 'https://api.binance.com/api/v3/ticker/24hr',
+            'params': lambda s: {'symbol': s.replace('/', '').replace('-', '').replace('_', '')},
+            'parse': lambda d: {
+                'price': float(d.get('lastPrice', 0)),
+                'change_24h': float(d.get('priceChangePercent', 0)),
+                'high_24h': float(d.get('highPrice', 0)),
+                'low_24h': float(d.get('lowPrice', 0)),
+                'volume_24h': float(d.get('quoteVolume', 0)),
+                'bid': float(d.get('bidPrice', 0)),
+                'ask': float(d.get('askPrice', 0)),
+            },
+        },
+        'okx': {
+            'url': 'https://www.okx.com/api/v5/market/ticker',
+            'params': lambda s: {'instId': s.replace('/', '-').replace('_', '-')},
+            'parse': lambda d: {
+                'price': float(d['data'][0]['last']) if d.get('data') else 0,
+                'change_24h': 0,
+                'high_24h': float(d['data'][0]['high24h']) if d.get('data') else 0,
+                'low_24h': float(d['data'][0]['low24h']) if d.get('data') else 0,
+                'volume_24h': float(d['data'][0]['volCcy24h']) if d.get('data') else 0,
+            },
+        },
+        'bybit': {
+            'url': 'https://api.bybit.com/v5/market/tickers',
+            'params': lambda s: {'category': 'spot', 'symbol': s.replace('/', '').replace('-', '').replace('_', '')},
+            'parse': lambda d: {
+                'price': float(d['result']['list'][0]['lastPrice']) if d.get('result', {}).get('list') else 0,
+                'change_24h': float(d['result']['list'][0]['price24hPcnt']) * 100 if d.get('result', {}).get('list') else 0,
+                'high_24h': float(d['result']['list'][0]['highPrice24h']) if d.get('result', {}).get('list') else 0,
+                'low_24h': float(d['result']['list'][0]['lowPrice24h']) if d.get('result', {}).get('list') else 0,
+                'volume_24h': float(d['result']['list'][0]['turnover24h']) if d.get('result', {}).get('list') else 0,
+            },
+        },
+        'upbit': {
+            'url': 'https://api.upbit.com/v1/ticker',
+            'params': lambda s: {'markets': s.replace('/', '-').replace('_', '-')},
+            'parse': lambda d: {
+                'price': float(d[0]['trade_price']) if d else 0,
+                'change_24h': float(d[0]['signed_change_rate']) * 100 if d else 0,
+                'high_24h': float(d[0]['high_price']) if d else 0,
+                'low_24h': float(d[0]['low_price']) if d else 0,
+                'volume_24h': float(d[0]['acc_trade_price_24h']) if d else 0,
+            },
+        },
+        'gate': {
+            'url': 'https://api.gateio.ws/api/v4/spot/tickers',
+            'params': lambda s: {'currency_pair': s.replace('/', '_').replace('-', '_')},
+            'parse': lambda d: {
+                'price': float(d[0]['last']) if d else 0,
+                'change_24h': float(d[0]['change_percentage']) if d else 0,
+                'high_24h': float(d[0]['high_24h']) if d else 0,
+                'low_24h': float(d[0]['low_24h']) if d else 0,
+                'volume_24h': float(d[0]['quote_volume']) if d else 0,
+            },
+        },
+    }
+    
+    if exchange not in TICKER_APIS:
+        return jsonify({'error': f'Unsupported exchange: {exchange}'}), 400
+    
+    config = TICKER_APIS[exchange]
+    
+    try:
+        resp = http_requests.get(
+            config['url'],
+            params=config['params'](symbol),
+            timeout=5
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            ticker = config['parse'](data)
+            ticker['exchange'] = exchange
+            ticker['symbol'] = symbol
+            ticker['timestamp'] = int(time.time() * 1000)
+            return jsonify(ticker)
+        else:
+            return jsonify({'error': f'API error: {resp.status_code}'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/analyze/<exchange>/<symbol>')
+def analyze_token(exchange, symbol):
+    """
+    AI 多维度分析
+    
+    分析维度：
+    - 流动性分析
+    - 市场情绪分析
+    - 宏观环境分析
+    - 综合交易建议
+    """
+    import asyncio
+    
+    try:
+        from analysis.multi_dimensional_analyzer import MultiDimensionalAnalyzer
+        
+        async def do_analyze():
+            analyzer = MultiDimensionalAnalyzer()
+            result = await analyzer.analyze({
+                'symbol': symbol.upper().replace('USDT', '').replace('_', '').replace('-', ''),
+                'exchange': exchange.lower(),
+                'event_type': 'query',
+                'raw_text': f'Query analysis for {symbol} on {exchange}',
+            })
+            await analyzer.close()
+            return result
+        
+        # 运行异步分析
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(do_analyze())
+        finally:
+            loop.close()
+        
+        return jsonify(result)
+        
+    except ImportError as e:
+        return jsonify({
+            'error': f'分析模块未安装: {e}',
+            'comprehensive_score': 50,
+            'trade_action': 'hold',
+            'reasoning': '分析模块未加载',
+        })
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'comprehensive_score': 0,
+            'trade_action': 'avoid',
+            'reasoning': f'分析失败: {e}',
+        }), 500
 
 
 # 交易所权重配置
@@ -1543,6 +1865,7 @@ HTML = '''<!DOCTYPE html>
             
             <!-- 交易所选择 -->
             <div class="flex flex-wrap gap-2 mb-4">
+                <button onclick="showAllTokens()" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-colors font-bold" data-ex="all">全部代币（融合）</button>
                 <button onclick="loadPairs('binance')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="binance">Binance</button>
                 <button onclick="loadPairs('okx')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="okx">OKX</button>
                 <button onclick="loadPairs('bybit')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="bybit">Bybit</button>
@@ -2126,9 +2449,28 @@ HTML = '''<!DOCTYPE html>
                 currentPairsData = data.pairs || [];
                 
                 document.getElementById('pairsModalTitle').textContent = `${exchange.toUpperCase()} 已知交易对`;
-                document.getElementById('pairsModalSubtitle').textContent = `共 ${data.total || 0} 个交易对（显示前 200 个）`;
+                document.getElementById('pairsModalSubtitle').textContent = `共 ${data.total || 0} 个交易对`;
                 
                 renderPairs(currentPairsData);
+            } catch (e) {
+                document.getElementById('pairsList').innerHTML = '<div class="text-center text-red-500 py-8">加载失败</div>';
+            }
+        }
+        
+        // 查看所有代币（融合）
+        async function showAllTokens() {
+            document.getElementById('pairsModal').classList.remove('hidden');
+            document.getElementById('pairsList').innerHTML = '<div class="text-center text-slate-400 py-8">加载中...</div>';
+            
+            try {
+                const res = await fetch('/api/tokens?limit=500');
+                const data = await res.json();
+                
+                document.getElementById('pairsModalTitle').textContent = '全部代币（融合视图）';
+                document.getElementById('pairsModalSubtitle').textContent = 
+                    `共 ${data.total} 个代币 | 多所上线: ${data.stats?.multi_exchange || 0} | 有合约: ${data.stats?.with_contract || 0}`;
+                
+                renderTokens(data.tokens || []);
             } catch (e) {
                 document.getElementById('pairsList').innerHTML = '<div class="text-center text-red-500 py-8">加载失败</div>';
             }
@@ -2140,8 +2482,15 @@ HTML = '''<!DOCTYPE html>
                 renderPairs(currentPairsData);
                 return;
             }
-            const filtered = currentPairsData.filter(p => p.toUpperCase().includes(search));
-            renderPairs(filtered);
+            const filtered = currentPairsData.filter(p => {
+                if (typeof p === 'string') return p.toUpperCase().includes(search);
+                return p.symbol?.toUpperCase().includes(search);
+            });
+            if (filtered[0] && typeof filtered[0] === 'object') {
+                renderTokens(filtered);
+            } else {
+                renderPairs(filtered);
+            }
         }
         
         function renderPairs(pairs) {
@@ -2162,6 +2511,55 @@ HTML = '''<!DOCTYPE html>
             }
             h += '</div>';
             document.getElementById('pairsList').innerHTML = h;
+        }
+        
+        function renderTokens(tokens) {
+            if (!tokens.length) {
+                document.getElementById('pairsList').innerHTML = '<div class="text-center text-slate-400 py-8">暂无代币数据</div>';
+                return;
+            }
+            
+            currentPairsData = tokens;
+            
+            let h = '<div class="space-y-2">';
+            for (const t of tokens) {
+                const tierBadge = t.tier_s_count > 0 ? '<span class="bg-green-100 text-green-700 text-xs px-1 rounded">S</span>' :
+                                  t.tier_a_count > 0 ? '<span class="bg-blue-100 text-blue-700 text-xs px-1 rounded">A</span>' :
+                                  t.tier_b_count > 0 ? '<span class="bg-yellow-100 text-yellow-700 text-xs px-1 rounded">B</span>' : '';
+                
+                const liquidity = t.liquidity_usd > 0 ? `$${(t.liquidity_usd/1000).toFixed(0)}k` : '-';
+                const contract = t.contract_address ? `<span class="text-green-600">✓</span>` : '';
+                
+                h += `
+                <div class="bg-slate-50 hover:bg-sky-50 rounded-lg p-3 cursor-pointer transition-colors flex items-center justify-between" onclick="showTokenDetail('${t.symbol}')">
+                    <div class="flex items-center gap-3">
+                        <div class="font-bold text-slate-800">${t.symbol}</div>
+                        ${tierBadge}
+                        ${contract}
+                    </div>
+                    <div class="flex items-center gap-4 text-sm">
+                        <div class="text-slate-500">${t.exchange_count} 交易所</div>
+                        <div class="text-slate-400">${liquidity}</div>
+                        <div class="text-xs text-slate-400">${t.exchanges.slice(0,3).join(', ')}${t.exchanges.length > 3 ? '...' : ''}</div>
+                    </div>
+                </div>`;
+            }
+            h += '</div>';
+            document.getElementById('pairsList').innerHTML = h;
+        }
+        
+        async function showTokenDetail(symbol) {
+            closePairsModal();
+            // 查找合约地址
+            try {
+                const res = await fetch(`/api/cross-exchange/${symbol}`);
+                const data = await res.json();
+                if (data.found) {
+                    alert(`${symbol} 详情:\\n\\n交易所: ${data.exchanges?.join(', ') || '-'}\\n合约: ${data.contract_address || '未知'}\\n链: ${data.chain || '未知'}\\n流动性: $${(data.liquidity_usd/1000).toFixed(0)}k`);
+                }
+            } catch (e) {
+                console.error(e);
+            }
         }
         
         function searchSymbol(symbol) {
