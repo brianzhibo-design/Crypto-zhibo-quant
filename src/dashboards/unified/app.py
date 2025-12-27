@@ -31,50 +31,140 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY", "")
 
-# 新上币关键词 (用于判断是否为新币)
-NEW_LISTING_KEYWORDS = [
-    'new trading pair', 'new pair', 'will list', 'listing', 'listed',
-    '新上', '上线', '新增', 'adds', 'added', 'launch', 'launched',
-    'perpetual', 'spot trading', '现货', '合约'
+# ============================================================
+# 新币判断逻辑
+# ============================================================
+# 核心原则: 新币 ≠ 新交易对
+# 新币 = 该交易所首次上线该代币（现货）
+
+# 高优先级关键词（几乎确定是新币上市）
+HIGH_PRIORITY_NEW_COIN = [
+    'will list', 'new listing', 'listing announcement', 'lists', 'to list',
+    'adds trading for', 'deposit open', 'trading now available',
+    'launchpool', 'launchpad', 'seed tag', 'innovation zone', 'alpha zone',
+    # 韩文
+    '신규 상장', '디지털 자산 추가', '마켓 추가',
+    # 中文
+    '即将上线', '新币上市', '首发上线',
 ]
 
-# 已有币对关键词 (价格变动、成交量等)
-EXISTING_PAIR_KEYWORDS = [
-    'price', 'volume', 'surge', 'pump', 'dump', 'spike', 'alert',
-    '价格', '成交量', '暴涨', '暴跌', 'whale', 'transfer', 'moved'
+# 排除关键词（绝对不是新币）
+EXCLUDE_KEYWORDS = [
+    'perpetual', 'futures', 'margin', 'leverage', 'contract',
+    'delisting', 'delist', 'suspended', 'maintenance',
+    'fee', 'upgrade', 'staking apr', 'airdrop completed',
+    'trading suspended', 'withdrawal', 'deposit suspended',
+    # 中文
+    '合约', '永续', '杠杆', '下架', '维护', '暂停',
+]
+
+# 新交易对关键词（需要二次判断）
+NEW_PAIR_KEYWORDS = [
+    'new trading pair', 'new pair', 'trading pair', 'new spot pair',
+    # 中文
+    '新增交易对', '交易对',
 ]
 
 
-def classify_event_type(raw_text: str, source: str) -> tuple:
+def extract_base_symbol(symbol: str) -> str:
+    """从交易对中提取基础代币符号
+    例如: BTC_USDT -> BTC, ETH/USD -> ETH
+    """
+    if not symbol:
+        return ''
+    # 去除常见后缀
+    for suffix in ['_USDT', '/USDT', '_USD', '/USD', '_BTC', '/BTC', 
+                   '_ETH', '/ETH', '-USDT', '-USD', 'USDT', 'USD']:
+        if symbol.upper().endswith(suffix.upper()):
+            return symbol[:len(symbol)-len(suffix)].upper()
+    return symbol.upper()
+
+
+def is_new_coin_listing(raw_text: str, symbol: str, exchange: str, redis_client) -> bool:
+    """
+    判断是否为真正的新币上市
+    
+    返回 True 的条件:
+    1. 包含高优先级新币关键词
+    2. 不包含排除关键词
+    3. 该代币在该交易所不存在其他交易对
+    """
+    if not raw_text:
+        return False
+    
+    text_lower = raw_text.lower()
+    
+    # 第一层：排除衍生品和非上币事件
+    if any(kw in text_lower for kw in EXCLUDE_KEYWORDS):
+        return False
+    
+    # 第二层：检查是否包含高优先级新币关键词
+    has_high_priority = any(kw in text_lower for kw in HIGH_PRIORITY_NEW_COIN)
+    
+    # 第三层：如果只是"新交易对"，需要检查该代币是否已存在
+    has_new_pair_keyword = any(kw in text_lower for kw in NEW_PAIR_KEYWORDS)
+    
+    if has_new_pair_keyword and not has_high_priority:
+        # 检查该代币是否已在该交易所存在
+        if redis_client and exchange and symbol:
+            base_symbol = extract_base_symbol(symbol)
+            existing_pairs = redis_client.smembers(f'known_pairs:{exchange.lower()}') or set()
+            
+            for pair in existing_pairs:
+                pair_base = extract_base_symbol(pair)
+                if pair_base == base_symbol:
+                    # 该代币已存在，这只是新交易对，不是新币
+                    return False
+    
+    # 如果有高优先级关键词，认为是新币
+    if has_high_priority:
+        return True
+    
+    return False
+
+
+def classify_event_type(raw_text: str, symbol: str, exchange: str, redis_client=None) -> tuple:
     """
     分类事件类型
-    返回: (event_type, is_new_listing)
+    返回: (event_type, is_new_coin)
+    
+    event_type:
+    - new_coin: 新币上市（该交易所首次上线该代币）
+    - new_pair: 新交易对（代币已存在，只是增加计价货币）
+    - whale_alert: 鲸鱼警报
+    - volume_spike: 成交量异常
+    - price_move: 价格波动
+    - signal: 其他信号
     """
-    text_lower = raw_text.lower() if raw_text else ''
-    source_lower = source.lower() if source else ''
-    
-    # 判断是否为新上币
-    is_new_listing = any(kw in text_lower for kw in NEW_LISTING_KEYWORDS)
-    
-    # 判断是否为鲸鱼/大额转账
-    is_whale = 'whale' in source_lower or 'whale' in text_lower or 'transfer' in text_lower
-    
-    # 判断是否为成交量异常
-    is_volume = 'volume' in source_lower or 'volume' in text_lower or 'spike' in text_lower
-    
-    # 判断是否为价格相关
-    is_price = 'price' in text_lower or 'pump' in text_lower or 'dump' in text_lower
-    
-    if is_new_listing:
-        return ('new_listing', True)
-    elif is_whale:
-        return ('whale_alert', False)
-    elif is_volume:
-        return ('volume_spike', False)
-    elif is_price:
-        return ('price_move', False)
-    else:
+    if not raw_text:
         return ('signal', False)
+    
+    text_lower = raw_text.lower()
+    
+    # 第一层：排除垃圾信息
+    garbage = ['cookie', 'accept', 'privacy', 'consent', 'subscribe']
+    if any(g in text_lower for g in garbage):
+        return ('signal', False)
+    
+    # 第二层：判断是否为新币上市
+    if is_new_coin_listing(raw_text, symbol, exchange, redis_client):
+        return ('new_coin', True)
+    
+    # 第三层：判断是否只是新交易对
+    if any(kw in text_lower for kw in NEW_PAIR_KEYWORDS):
+        return ('new_pair', False)
+    
+    # 第四层：其他类型判断
+    if 'whale' in text_lower or 'transfer' in text_lower or '鲸鱼' in text_lower:
+        return ('whale_alert', False)
+    
+    if 'volume' in text_lower or 'spike' in text_lower or '成交量' in text_lower:
+        return ('volume_spike', False)
+    
+    if 'price' in text_lower or 'pump' in text_lower or 'dump' in text_lower:
+        return ('price_move', False)
+    
+    return ('signal', False)
 
 # 功能模块配置 - 按功能划分
 NODES = {
@@ -207,25 +297,25 @@ def get_events():
                     pass
 
             raw_text = data.get('raw_text', data.get('text', ''))
-            source = data.get('source', '')
+            exchange = data.get('exchange', '')
             
-            # 使用分类函数判断事件类型
-            event_type, is_new_listing = classify_event_type(raw_text, source)
+            # 使用分类函数判断事件类型（传入 Redis 客户端检查已知币对）
+            event_type, is_new_coin = classify_event_type(raw_text, symbols, exchange, r)
 
             events.append({
                 'id': mid,
                 'symbol': symbols or '-',
-                'exchange': data.get('exchange', '-'),
+                'exchange': exchange or '-',
                 'text': raw_text[:150] if raw_text else '',
                 'ts': data.get('ts', data.get('detected_at', mid.split('-')[0])),
-                'source': source or '-',
+                'source': data.get('source', '-'),
                 'score': data.get('score', '0'),
                 'source_count': data.get('source_count', '1'),
                 'is_super_event': data.get('is_super_event', '0'),
                 'contract_address': data.get('contract_address', ''),
                 'chain': data.get('chain', ''),
                 'event_type': event_type,
-                'is_new_listing': is_new_listing,
+                'is_new_coin': is_new_coin,  # 真正的新币上市
             })
     except:
         pass
@@ -460,9 +550,9 @@ def get_insight():
                 client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
                 
                 # 构建更详细的信号数据
-                signal_details = []
-                new_listings = []
-                existing_signals = []
+                new_coins = []       # 新币上市（高价值）
+                new_pairs = []       # 新交易对（低价值）
+                other_signals = []   # 其他信号
                 
                 for _, d in items[:20]:
                     symbol = d.get('symbols', d.get('symbol', ''))
@@ -470,26 +560,33 @@ def get_insight():
                     raw_text = d.get('raw_text', '')[:100]
                     score = d.get('score', '0')
                     
-                    event_type, is_new = classify_event_type(raw_text, d.get('source', ''))
+                    event_type, is_new_coin = classify_event_type(raw_text, symbol, exchange, r)
                     
-                    if is_new:
-                        new_listings.append(f"🆕 {symbol} @ {exchange} (评分:{score})")
+                    if is_new_coin:
+                        new_coins.append(f"🚀 {symbol} @ {exchange} (评分:{score})")
+                    elif event_type == 'new_pair':
+                        new_pairs.append(f"➕ {symbol} @ {exchange}")
                     else:
-                        existing_signals.append(f"📊 {symbol} @ {exchange}: {raw_text[:50]}")
+                        other_signals.append(f"📊 {symbol} @ {exchange}")
                 
-                prompt = f"""作为加密货币市场分析师，请用中文简洁分析以下信号（50字以内）：
+                prompt = f"""作为加密货币市场分析师，请用中文简洁分析以下信号（80字以内）：
 
-新上币信号 ({len(new_listings)}个):
-{chr(10).join(new_listings[:5]) if new_listings else '暂无'}
+🚀 新币上市（首次上线，高价值）共 {len(new_coins)} 个:
+{chr(10).join(new_coins[:5]) if new_coins else '暂无'}
 
-已有币对信号 ({len(existing_signals)}个):
-{chr(10).join(existing_signals[:5]) if existing_signals else '暂无'}
+➕ 新交易对（代币已存在，低价值）共 {len(new_pairs)} 个:
+{chr(10).join(new_pairs[:3]) if new_pairs else '暂无'}
 
-请分析市场趋势，重点关注：1) 新上币的交易所分布 2) 热门币种 3) 是否有异常活动"""
+📊 其他信号 共 {len(other_signals)} 个
+
+请重点分析：
+1) 有价值的新币上市机会
+2) 哪些交易所活跃
+3) 是否有值得关注的趋势"""
 
                 response = client.messages.create(
                     model="claude-haiku-4-5-latest",
-                    max_tokens=150,
+                    max_tokens=200,
                     messages=[
                         {"role": "user", "content": prompt}
                     ]
@@ -1157,31 +1254,33 @@ HTML = '''<!DOCTYPE html>
         
         // 类型中文映射
         const typeMap = {
-            // 新事件类型
-            'new_listing': '新上币',
+            // 核心类型
+            'new_coin': '新币上市',      // 交易所首次上线该代币（高价值）
+            'new_pair': '新交易对',      // 代币已存在，只是新增计价货币（低价值）
             'whale_alert': '鲸鱼警报',
             'volume_spike': '成交量异常',
             'price_move': '价格波动',
-            'signal': '已有币对',
+            'signal': '信号',
             // 兼容旧类型
+            'new_listing': '新币上市',
             'Whale Alert': '鲸鱼警报',
-            'New Listing': '新上币',
+            'New Listing': '新币上市',
             'Volume Spike': '成交量异常',
             'Smart Money': '聪明钱',
             'cex_listing': 'CEX上币',
             'dex_pool': 'DEX新池',
             'telegram': 'TG信号',
             'news': '新闻',
-            'whale': '鲸鱼',
         };
         
-        // 类型样式映射 - 新上币用绿色高亮，已有币对用蓝色
+        // 类型样式映射
         const typeStyles = {
-            'new_listing': { class: 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-400', icon: 'sparkles' },
+            'new_coin': { class: 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-400 font-bold', icon: 'rocket' },  // 新币 - 绿色高亮
+            'new_pair': { class: 'bg-slate-100 text-slate-500', icon: 'plus-circle' },  // 新交易对 - 灰色（低优先级）
             'whale_alert': { class: 'bg-purple-100 text-purple-700', icon: 'fish' },
             'volume_spike': { class: 'bg-amber-100 text-amber-700', icon: 'trending-up' },
             'price_move': { class: 'bg-sky-100 text-sky-700', icon: 'activity' },
-            'signal': { class: 'bg-blue-100 text-blue-600', icon: 'bar-chart-2' },
+            'signal': { class: 'bg-blue-100 text-blue-600', icon: 'radio' },
         };
 
         async function loadEvents() {
@@ -1210,23 +1309,29 @@ HTML = '''<!DOCTYPE html>
                     
                     // 获取事件类型和样式
                     const eventType = e.event_type || e.type || 'signal';
-                    const isNewListing = e.is_new_listing === true || e.is_new_listing === 'true';
+                    const isNewCoin = e.is_new_coin === true || e.is_new_coin === 'true';
                     
                     // 根据事件类型获取样式
                     let style, typeClass, typeIcon, typeLabel;
                     
-                    if (isNewListing) {
-                        // 新上币 - 绿色高亮
-                        style = typeStyles['new_listing'];
+                    if (isNewCoin) {
+                        // 新币上市 - 绿色高亮（高价值）
+                        style = typeStyles['new_coin'];
                         typeClass = style.class;
                         typeIcon = style.icon;
-                        typeLabel = '新上币';
+                        typeLabel = '新币上市';
+                    } else if (eventType === 'new_pair') {
+                        // 新交易对 - 灰色（低价值，代币已存在）
+                        style = typeStyles['new_pair'];
+                        typeClass = style.class;
+                        typeIcon = style.icon;
+                        typeLabel = '新交易对';
                     } else {
-                        // 已有币对 - 蓝色
+                        // 其他信号
                         style = typeStyles[eventType] || typeStyles['signal'];
                         typeClass = style.class;
                         typeIcon = style.icon;
-                        typeLabel = typeMap[eventType] || '已有币对';
+                        typeLabel = typeMap[eventType] || '信号';
                     }
 
                     let scoreColor = 'bg-slate-200';
@@ -1488,13 +1593,20 @@ HTML = '''<!DOCTYPE html>
             document.getElementById('detailExchange').textContent = e.exchange || '-';
             document.getElementById('detailScore').textContent = parseFloat(e.score || 0).toFixed(0);
             
-            // 显示事件类型（新上币/已有币对）
+            // 显示事件类型
             const eventType = e.event_type || e.type || 'signal';
-            const isNew = e.is_new_listing === true || e.is_new_listing === 'true';
-            document.getElementById('detailSource').innerHTML = isNew 
-                ? '<span class="text-emerald-600 font-semibold">新上币</span>'
-                : `<span>${typeMap[eventType] || typeMap[e.source_type] || '已有币对'}</span>`;
-            document.getElementById('detailTokenType').textContent = isNew ? '新上市代币' : (e.token_type || '已有币对');
+            const isNewCoin = e.is_new_coin === true || e.is_new_coin === 'true';
+            
+            if (isNewCoin) {
+                document.getElementById('detailSource').innerHTML = '<span class="text-emerald-600 font-bold">🚀 新币上市</span>';
+                document.getElementById('detailTokenType').textContent = '首次上线（高价值）';
+            } else if (eventType === 'new_pair') {
+                document.getElementById('detailSource').innerHTML = '<span class="text-slate-500">新交易对</span>';
+                document.getElementById('detailTokenType').textContent = '代币已存在（低价值）';
+            } else {
+                document.getElementById('detailSource').innerHTML = `<span>${typeMap[eventType] || '信号'}</span>`;
+                document.getElementById('detailTokenType').textContent = e.token_type || eventType;
+            }
             
             const isTradeable = e.is_tradeable === '1' || e.is_tradeable === true;
             document.getElementById('detailTradeable').innerHTML = isTradeable 
