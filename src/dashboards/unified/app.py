@@ -1938,6 +1938,13 @@ HTML = '''<!DOCTYPE html>
             background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%);
             color: #1e293b;
         }
+        /* 弹窗打开时禁止背景滚动 */
+        body.modal-open {
+            overflow: hidden !important;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
         ::selection { background: rgba(14, 165, 233, 0.2); }
         .card { 
             background: white; 
@@ -1949,6 +1956,15 @@ HTML = '''<!DOCTYPE html>
         .card:hover { 
             box-shadow: 0 4px 12px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04);
             transform: translateY(-1px);
+        }
+        /* 弹窗遮罩层 */
+        .modal-overlay {
+            overscroll-behavior: contain;
+        }
+        /* 弹窗内容区域 - 阻止滚动链 */
+        .modal-content-scrollable {
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
         }
         .scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 3px; }
@@ -2350,8 +2366,8 @@ HTML = '''<!DOCTYPE html>
     </main>
 
     <!-- Search Modal -->
-    <div id="searchModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50" onclick="if(event.target===this)closeSearch()">
-        <div class="card p-5 w-full max-w-lg mx-4 max-h-[70vh] overflow-hidden" onclick="event.stopPropagation()">
+    <div id="searchModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50 modal-overlay overflow-y-auto py-8" onclick="if(event.target===this)closeSearch()">
+        <div class="card p-5 w-full max-w-xl mx-4 max-h-[80vh] overflow-hidden modal-content-scrollable" onclick="event.stopPropagation()">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="font-semibold text-slate-700">搜索</h3>
                 <button onclick="closeSearch()" class="text-slate-400 hover:text-slate-600 transition-colors">
@@ -2380,8 +2396,8 @@ HTML = '''<!DOCTYPE html>
     </div>
     
     <!-- Pairs Modal 交易对查看弹窗 -->
-    <div id="pairsModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50" onclick="if(event.target===this)closePairsModal()">
-        <div class="card p-6 w-full max-w-4xl mx-4 max-h-[85vh] overflow-hidden flex flex-col" onclick="event.stopPropagation()">
+    <div id="pairsModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50 modal-overlay overflow-y-auto py-8" onclick="if(event.target===this)closePairsModal()">
+        <div class="card p-6 w-full max-w-5xl mx-4 max-h-[85vh] overflow-hidden flex flex-col modal-content-scrollable" onclick="event.stopPropagation()">
             <div class="flex justify-between items-center mb-4">
                 <div>
                     <h3 id="pairsModalTitle" class="font-semibold text-slate-700 text-lg">代币列表</h3>
@@ -2420,8 +2436,8 @@ HTML = '''<!DOCTYPE html>
     </div>
     
     <!-- Token Detail Modal 代币详情弹窗（实时行情） -->
-    <div id="tokenDetailModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50" onclick="if(event.target===this)closeTokenDetail()">
-        <div class="card p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col" onclick="event.stopPropagation()">
+    <div id="tokenDetailModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50 modal-overlay overflow-y-auto py-4" onclick="if(event.target===this)closeTokenDetail()">
+        <div class="card p-6 w-full max-w-6xl mx-4 max-h-[95vh] overflow-y-auto flex flex-col modal-content-scrollable scrollbar" onclick="event.stopPropagation()" style="min-height: auto;">
             <div class="flex justify-between items-center mb-4">
                 <div class="flex items-center gap-3">
                     <div id="tokenIcon" class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-bold text-xl">?</div>
@@ -2680,8 +2696,8 @@ HTML = '''<!DOCTYPE html>
     </div>
     
     <!-- Event Detail Modal 消息详情弹窗 -->
-    <div id="eventDetailModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50" onclick="if(event.target===this)closeEventDetail()">
-        <div class="card p-6 w-full max-w-2xl mx-4 max-h-[85vh] overflow-hidden" onclick="event.stopPropagation()">
+    <div id="eventDetailModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50 modal-overlay overflow-y-auto py-4" onclick="if(event.target===this)closeEventDetail()">
+        <div class="card p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto modal-content-scrollable scrollbar" onclick="event.stopPropagation()">
             <div class="flex justify-between items-center mb-5">
                 <div class="flex items-center gap-3">
                     <div id="detailRatingBadge" class="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-white font-bold text-xl">S</div>
@@ -3442,6 +3458,11 @@ HTML = '''<!DOCTYPE html>
         }
 
         function showSearch() {
+            if (!document.body.classList.contains('modal-open')) {
+                savedScrollY = window.scrollY;
+                document.body.classList.add('modal-open');
+                document.body.style.top = `-${savedScrollY}px`;
+            }
             document.getElementById('searchModal').classList.remove('hidden');
             document.getElementById('searchModal').classList.add('flex');
             document.getElementById('searchInput').focus();
@@ -3450,6 +3471,10 @@ HTML = '''<!DOCTYPE html>
         function closeSearch() {
             document.getElementById('searchModal').classList.add('hidden');
             document.getElementById('searchModal').classList.remove('flex');
+            
+            document.body.classList.remove('modal-open');
+            document.body.style.top = '';
+            window.scrollTo(0, savedScrollY);
         }
 
         async function doSearch() {
@@ -3520,8 +3545,14 @@ HTML = '''<!DOCTYPE html>
         // ========== 交易对查看弹窗 ==========
         let currentPairsData = [];
         let currentExchange = '';
+        let savedScrollY = 0;
         
         function showPairsModal() {
+            // 保存当前滚动位置并锁定背景
+            savedScrollY = window.scrollY;
+            document.body.classList.add('modal-open');
+            document.body.style.top = `-${savedScrollY}px`;
+            
             document.getElementById('pairsModal').classList.remove('hidden');
             document.getElementById('pairsModal').classList.add('flex');
             lucide.createIcons();
@@ -3530,6 +3561,19 @@ HTML = '''<!DOCTYPE html>
         function closePairsModal() {
             document.getElementById('pairsModal').classList.add('hidden');
             document.getElementById('pairsModal').classList.remove('flex');
+            
+            // 如果没有其他弹窗打开，恢复背景滚动
+            const otherModals = ['tokenDetailModal', 'eventDetailModal', 'searchModal'];
+            const hasOtherOpen = otherModals.some(id => {
+                const el = document.getElementById(id);
+                return el && !el.classList.contains('hidden');
+            });
+            
+            if (!hasOtherOpen) {
+                document.body.classList.remove('modal-open');
+                document.body.style.top = '';
+                window.scrollTo(0, savedScrollY);
+            }
         }
         
         async function loadPairs(exchange) {
@@ -3668,14 +3712,14 @@ HTML = '''<!DOCTYPE html>
                 return;
             }
             
-            let h = '<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">';
+            let h = '<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">';
             for (const pair of pairs) {
                 // 提取基础代币
                 const base = pair.replace(/_USDT|\/USDT|-USDT|USDT|_USD|\/USD|-USD|USD/gi, '');
                 h += `
-                <div class="bg-slate-50 hover:bg-sky-50 rounded-lg p-2 text-center cursor-pointer transition-colors" 
-                     onclick="event.stopPropagation(); showTokenDetail('${base}')">
-                    <div class="font-medium text-slate-700 text-sm">${pair}</div>
+                <div class="pair-card bg-slate-50 hover:bg-sky-100 hover:border-sky-300 border border-transparent rounded-xl p-3 text-center cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5" 
+                     onclick="event.stopPropagation(); console.log('点击交易对:', '${base}', '${currentExchange}'); showTokenDetail('${base}', '${currentExchange}');">
+                    <div class="font-semibold text-slate-700 text-sm mb-1">${pair}</div>
                     <div class="text-xs text-slate-400">${base}</div>
                 </div>`;
             }
@@ -3705,31 +3749,45 @@ HTML = '''<!DOCTYPE html>
             
             let h = '<div class="space-y-2">';
             for (const t of tokens) {
-                const tierBadge = t.tier_s_count > 0 ? '<span class="bg-green-100 text-green-700 text-xs px-1 rounded">S</span>' :
-                                  t.tier_a_count > 0 ? '<span class="bg-blue-100 text-blue-700 text-xs px-1 rounded">A</span>' :
-                                  t.tier_b_count > 0 ? '<span class="bg-yellow-100 text-yellow-700 text-xs px-1 rounded">B</span>' : '';
+                const tierBadge = t.tier_s_count > 0 ? '<span class="bg-green-100 text-green-700 text-xs px-1.5 py-0.5 rounded font-medium">S级</span>' :
+                                  t.tier_a_count > 0 ? '<span class="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded font-medium">A级</span>' :
+                                  t.tier_b_count > 0 ? '<span class="bg-yellow-100 text-yellow-700 text-xs px-1.5 py-0.5 rounded font-medium">B级</span>' : '';
                 
                 const liquidity = t.liquidity_usd > 0 ? `$${(t.liquidity_usd/1000).toFixed(0)}k` : '-';
-                const contract = t.contract_address ? `<span class="text-green-600">✓</span>` : '';
+                const contract = t.contract_address ? `<span class="text-green-600 text-xs">✓ 合约</span>` : '';
                 
                 // 类别标签
                 const cat = t.category || 'other';
                 const catStyle = CAT_STYLES[cat] || CAT_STYLES.other;
                 const catBadge = catStyle.label ? `<span class="${catStyle.bg} ${catStyle.text} text-xs px-1.5 py-0.5 rounded">${catStyle.label}</span>` : '';
                 
+                // 获取第一个交易所作为默认
+                const defaultExchange = t.exchanges && t.exchanges.length > 0 ? t.exchanges[0] : 'binance';
+                
                 h += `
-                <div class="bg-slate-50 hover:bg-sky-50 rounded-lg p-3 cursor-pointer transition-colors flex items-center justify-between" 
-                     onclick="event.stopPropagation(); showTokenDetail('${t.symbol}')">
-                    <div class="flex items-center gap-2">
-                        <div class="font-bold text-slate-800">${t.symbol}</div>
-                        ${catBadge}
-                        ${tierBadge}
-                        ${contract}
+                <div class="token-card bg-slate-50 hover:bg-sky-100 hover:border-sky-300 border border-transparent rounded-xl p-4 cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 flex items-center justify-between" 
+                     onclick="event.stopPropagation(); console.log('点击代币:', '${t.symbol}', '${defaultExchange}'); showTokenDetail('${t.symbol}', '${defaultExchange}');">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-bold text-sm">${t.symbol.charAt(0)}</div>
+                        <div>
+                            <div class="font-bold text-slate-800 text-base">${t.symbol}</div>
+                            <div class="flex items-center gap-1.5 mt-0.5">
+                                ${catBadge}
+                                ${tierBadge}
+                                ${contract}
+                            </div>
+                        </div>
                     </div>
-                    <div class="flex items-center gap-4 text-sm">
-                        <div class="text-slate-500">${t.exchange_count} 所</div>
-                        <div class="text-slate-400">${liquidity}</div>
-                        <div class="text-xs text-slate-400">${t.exchanges.slice(0,3).join(', ')}${t.exchanges.length > 3 ? '...' : ''}</div>
+                    <div class="flex items-center gap-6 text-sm">
+                        <div class="text-right">
+                            <div class="text-slate-600 font-medium">${t.exchange_count} 所</div>
+                            <div class="text-xs text-slate-400">${t.exchanges.slice(0,3).join(', ')}${t.exchanges.length > 3 ? '...' : ''}</div>
+                        </div>
+                        <div class="text-right min-w-[60px]">
+                            <div class="text-slate-500">${liquidity}</div>
+                            <div class="text-xs text-slate-400">流动性</div>
+                        </div>
+                        <i data-lucide="chevron-right" class="w-5 h-5 text-slate-300"></i>
                     </div>
                 </div>`;
             }
@@ -3741,8 +3799,19 @@ HTML = '''<!DOCTYPE html>
         // 当前代币数据
         let currentTokenData = null;
         
-        async function showTokenDetail(symbol) {
+        async function showTokenDetail(symbol, exchange = null) {
+            console.log('=== showTokenDetail 调用 ===');
+            console.log('Symbol:', symbol, 'Exchange:', exchange);
+            
+            // 先关闭交易对列表弹窗
             closePairsModal();
+            
+            // 保存滚动位置并锁定背景
+            if (!document.body.classList.contains('modal-open')) {
+                savedScrollY = window.scrollY;
+                document.body.classList.add('modal-open');
+                document.body.style.top = `-${savedScrollY}px`;
+            }
             
             // 显示弹窗
             const modal = document.getElementById('tokenDetailModal');
@@ -5739,6 +5808,11 @@ HTML = '''<!DOCTYPE html>
             document.getElementById('tokenDetailModal').classList.add('hidden');
             document.getElementById('tokenDetailModal').classList.remove('flex');
             
+            // 恢复背景滚动
+            document.body.classList.remove('modal-open');
+            document.body.style.top = '';
+            window.scrollTo(0, savedScrollY);
+            
             // 关闭 WebSocket
             if (chartWebSocket) {
                 chartWebSocket.close();
@@ -5801,6 +5875,13 @@ HTML = '''<!DOCTYPE html>
             if (!e) return;
             currentDetailEvent = e;
             currentEventData = e;  // 设置当前事件数据用于查找合约
+            
+            // 锁定背景滚动
+            if (!document.body.classList.contains('modal-open')) {
+                savedScrollY = window.scrollY;
+                document.body.classList.add('modal-open');
+                document.body.style.top = `-${savedScrollY}px`;
+            }
             
             const modal = document.getElementById('eventDetailModal');
             modal.classList.remove('hidden');
@@ -5953,6 +6034,11 @@ HTML = '''<!DOCTYPE html>
             modal.classList.add('hidden');
             modal.classList.remove('flex');
             currentDetailEvent = null;
+            
+            // 恢复背景滚动
+            document.body.classList.remove('modal-open');
+            document.body.style.top = '';
+            window.scrollTo(0, savedScrollY);
         }
         
         function copyContract() {
