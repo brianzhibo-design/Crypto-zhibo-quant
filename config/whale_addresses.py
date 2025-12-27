@@ -23,11 +23,11 @@ ADDRESS_LABELS_CN = {
 # 监控配置
 WHALE_MONITOR_CONFIG = {
     'thresholds': {
-        'large_transfer': 50000,       # 大额转账阈值 (USD) - 降低阈值获取更多数据
+        'large_transfer': 10000,       # 大额转账阈值 (USD) - 降低阈值获取更多数据
         'whale_balance': 1000000,      # 巨鲸余额阈值 (USD)
-        'smart_money_min': 10000,      # 聪明钱最小交易额 (USD)
-        'eth_min': 10,                 # ETH 最小金额
-        'token_min_usd': 10000,        # 代币最小 USD 价值
+        'smart_money_min': 5000,       # 聪明钱最小交易额 (USD)
+        'eth_min': 1,                  # ETH 最小金额 (降低到 1 ETH ≈ $3500)
+        'token_min_usd': 5000,         # 代币最小 USD 价值
     },
     'poll_intervals': {
         'priority_1': 30,              # 最高优先级轮询间隔 (秒)
