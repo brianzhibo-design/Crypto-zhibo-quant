@@ -557,22 +557,57 @@ class InstitutionalScorer:
         
         return total_bonus, source_count, exchange_count
     
-    def check_korean_arbitrage(self, symbol: str, exchange: str) -> Optional[dict]:
+    def check_korean_arbitrage(self, symbol: str, exchange: str, redis_client=None) -> Optional[dict]:
         """
         检查韩国套利机会
         韩国所上币 + 其他交易所已有该币 = 套利机会
+        
+        检查逻辑：
+        1. 先检查内存中的 symbol_exchanges（同一运行周期）
+        2. 再检查 Redis known_pairs（历史数据）
         """
         if exchange not in KOREAN_EXCHANGES:
             return None
         
-        # 检查其他交易所是否已有
-        other_exchanges = [ex for ex in self.symbol_exchanges.get(symbol, set()) if ex not in KOREAN_EXCHANGES]
+        if not symbol:
+            return None
+        
+        other_exchanges = []
+        
+        # 1. 检查内存中的交易所列表
+        memory_exchanges = [ex for ex in self.symbol_exchanges.get(symbol, set()) if ex not in KOREAN_EXCHANGES]
+        other_exchanges.extend(memory_exchanges)
+        
+        # 2. 检查 Redis known_pairs
+        if redis_client:
+            try:
+                non_korean_exchanges = ['binance', 'okx', 'bybit', 'gate', 'kucoin', 'bitget', 'coinbase', 'kraken']
+                for ex in non_korean_exchanges:
+                    if ex in other_exchanges:
+                        continue
+                    # 检查多种格式
+                    patterns = [
+                        f"{symbol}_USDT", f"{symbol}/USDT", f"{symbol}-USDT", 
+                        f"{symbol}USDT", f"{symbol}_USD", f"{symbol}/USD"
+                    ]
+                    for pattern in patterns:
+                        if redis_client.sismember(f"known_pairs:{ex}", pattern):
+                            other_exchanges.append(ex)
+                            break
+            except Exception:
+                pass  # Redis 错误不影响评分
+        
+        # 去重
+        other_exchanges = list(set(other_exchanges))
         
         if other_exchanges:
+            # 按交易所权重排序
+            best_exchange = sorted(other_exchanges, key=lambda x: -EXCHANGE_SCORES.get(x, 0))[0]
             return {
                 'action': 'BUY_ON_OTHER',
-                'buy_exchange': sorted(other_exchanges, key=lambda x: -EXCHANGE_SCORES.get(x, 0))[0],
+                'buy_exchange': best_exchange,
                 'korean_exchange': exchange,
+                'available_exchanges': other_exchanges,
                 'reason': 'Korean pump arbitrage',
                 'expected_pump': '30-100%',
                 'score_bonus': 20,
@@ -615,11 +650,16 @@ class InstitutionalScorer:
         
         return False, f"未达标(分数{final_score:.0f}<{TRIGGER_THRESHOLD})"
     
-    def calculate_score(self, event: dict) -> dict:
+    def calculate_score(self, event: dict, redis_client=None, logger=None) -> dict:
         """
         计算事件评分
         
         公式：final_score = (base_score + event_score) × exchange_mult × freshness_mult + multi_bonus
+        
+        参数：
+        - event: 事件数据
+        - redis_client: Redis 连接（用于检查 known_pairs）
+        - logger: 日志记录器（用于记录评分明细）
         """
         current_time = datetime.now(timezone.utc).timestamp()
         symbols = self.extract_symbols(event)
@@ -643,6 +683,7 @@ class InstitutionalScorer:
             self.symbol_first_seen[primary_symbol] = current_time
             freshness_mult = get_freshness_multiplier(0)
             is_first = True
+            seconds_ago = 0
         else:
             seconds_ago = current_time - first_seen
             freshness_mult = get_freshness_multiplier(seconds_ago)
@@ -654,11 +695,14 @@ class InstitutionalScorer:
         )
         
         # 6. 韩国套利加分
-        korean_arb = self.check_korean_arbitrage(primary_symbol, exchange)
+        korean_arb = self.check_korean_arbitrage(primary_symbol, exchange, redis_client)
         korean_bonus = korean_arb['score_bonus'] if korean_arb else 0
         
         # 7. 计算总分
-        final_score = (base_score + event_score) * exchange_mult * freshness_mult + multi_bonus + korean_bonus
+        # 公式：(base + event) × exchange_mult × freshness_mult + multi_bonus + korean_bonus
+        pre_mult_score = base_score + event_score
+        post_mult_score = pre_mult_score * exchange_mult * freshness_mult
+        final_score = post_mult_score + multi_bonus + korean_bonus
         
         # 8. 判断是否触发
         should_trigger, trigger_reason = self.should_trigger(
@@ -674,7 +718,8 @@ class InstitutionalScorer:
                 if e.get('_timestamp', 0) > current_time - 600
             ]
         
-        return {
+        # 评分结果
+        result = {
             'total_score': round(final_score, 1),
             'base_score': round(base_score, 1),
             'event_score': round(event_score, 1),
@@ -688,10 +733,39 @@ class InstitutionalScorer:
             'event_type': event_type,
             'symbols': symbols,
             'is_first': is_first,
+            'seconds_ago': round(seconds_ago, 1),
             'should_trigger': should_trigger,
             'trigger_reason': trigger_reason,
             'korean_arbitrage': korean_arb,
+            # 评分明细（便于调试）
+            'score_breakdown': {
+                'formula': '(base + event) × exchange_mult × freshness_mult + bonuses',
+                'base_score': base_score,
+                'event_score': event_score,
+                'pre_mult': pre_mult_score,
+                'exchange_mult': exchange_mult,
+                'freshness_mult': freshness_mult,
+                'post_mult': round(post_mult_score, 1),
+                'multi_bonus': multi_bonus,
+                'korean_bonus': korean_bonus,
+                'final': round(final_score, 1),
+            }
         }
+        
+        # 记录评分日志
+        if logger and should_trigger:
+            logger.info(
+                f"📊 评分触发: {primary_symbol} @ {exchange} | "
+                f"来源:{classified_source} | 类型:{event_type} | "
+                f"评分:({base_score}+{event_score})×{exchange_mult}×{freshness_mult}+{multi_bonus}+{korean_bonus}="
+                f"{final_score:.0f} | {trigger_reason}"
+            )
+        elif logger and final_score >= 40:
+            logger.debug(
+                f"📈 评分: {primary_symbol} @ {exchange} | {final_score:.0f}分 | {trigger_reason}"
+            )
+        
+        return result
     
     def is_duplicate(self, event: dict) -> bool:
         """检查事件是否重复"""

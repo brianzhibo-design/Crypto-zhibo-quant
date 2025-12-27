@@ -1557,6 +1557,16 @@ HTML = '''<!DOCTYPE html>
                 </div>
             </div>
             
+            <!-- 评分明细 -->
+            <div id="scoreBreakdownSection" class="mb-5 hidden">
+                <div class="text-xs text-slate-400 uppercase tracking-wider mb-2">评分明细</div>
+                <div class="bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl p-4">
+                    <div id="scoreBreakdown" class="font-mono text-sm text-slate-600">
+                        <!-- 动态填充 -->
+                    </div>
+                </div>
+            </div>
+            
             <div class="grid grid-cols-2 gap-4 mb-5">
                 <div>
                     <div class="text-xs text-slate-400 uppercase tracking-wider mb-2">合约地址</div>
@@ -2170,6 +2180,54 @@ HTML = '''<!DOCTYPE html>
             }
             
             document.getElementById('detailChain').textContent = e.chain || 'unknown';
+            
+            // 评分明细显示
+            const scoreSection = document.getElementById('scoreBreakdownSection');
+            const scoreBreakdown = document.getElementById('scoreBreakdown');
+            if (e.score_breakdown || e.base_score !== undefined) {
+                scoreSection.classList.remove('hidden');
+                const bd = e.score_breakdown || {};
+                const baseScore = bd.base_score || e.base_score || 0;
+                const eventScore = bd.event_score || e.event_score || 0;
+                const exchangeMult = bd.exchange_mult || e.exchange_multiplier || 1;
+                const freshnessMult = bd.freshness_mult || e.freshness_multiplier || 1;
+                const multiBonus = bd.multi_bonus || e.multi_bonus || 0;
+                const koreanBonus = bd.korean_bonus || e.korean_bonus || 0;
+                const finalScore = bd.final || e.score || 0;
+                
+                const eventType = e.event_type || 'unknown';
+                const classifiedSource = e.classified_source || e.source || '-';
+                const triggerReason = e.trigger_reason || '-';
+                
+                scoreBreakdown.innerHTML = `
+                    <div class="grid grid-cols-2 gap-4 text-xs">
+                        <div>
+                            <span class="text-slate-400">来源类型:</span>
+                            <span class="text-sky-600 ml-1">${classifiedSource}</span>
+                        </div>
+                        <div>
+                            <span class="text-slate-400">事件类型:</span>
+                            <span class="text-violet-600 ml-1">${eventType}</span>
+                        </div>
+                    </div>
+                    <div class="mt-3 p-2 bg-white rounded-lg">
+                        <div class="text-xs text-slate-500 mb-1">公式: (来源分 + 事件分) × 交易所乘数 × 时效乘数 + 加分</div>
+                        <div class="font-medium">
+                            (<span class="text-sky-600">${baseScore}</span> + <span class="text-violet-600">${eventScore}</span>) 
+                            × <span class="text-amber-600">${exchangeMult}</span> 
+                            × <span class="text-emerald-600">${freshnessMult}</span> 
+                            + <span class="text-rose-600">${multiBonus}</span>
+                            ${koreanBonus > 0 ? `+ <span class="text-pink-600">${koreanBonus}</span>` : ''}
+                            = <span class="text-lg font-bold ${finalScore >= 60 ? 'text-emerald-600' : 'text-slate-700'}">${parseFloat(finalScore).toFixed(0)}</span>
+                        </div>
+                    </div>
+                    ${e.should_trigger ? `<div class="mt-2 text-xs text-emerald-600 font-medium">✓ 触发: ${triggerReason}</div>` : 
+                      `<div class="mt-2 text-xs text-slate-400">${triggerReason}</div>`}
+                    ${e.korean_arbitrage ? `<div class="mt-2 text-xs text-pink-600 font-medium">🇰🇷 韩国套利: 在 ${e.korean_arbitrage.buy_exchange} 买入</div>` : ''}
+                `;
+            } else {
+                scoreSection.classList.add('hidden');
+            }
             
             // 评级徽章颜色
             const score = parseFloat(e.score || 0);
