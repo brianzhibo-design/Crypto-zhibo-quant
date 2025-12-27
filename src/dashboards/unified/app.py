@@ -1158,30 +1158,30 @@ HTML = '''<!DOCTYPE html>
         // 类型中文映射
         const typeMap = {
             // 新事件类型
-            'new_listing': '🆕 新上币',
-            'whale_alert': '🐋 鲸鱼警报',
-            'volume_spike': '📈 成交量异常',
-            'price_move': '💹 价格波动',
-            'signal': '📊 已有币对',
+            'new_listing': '新上币',
+            'whale_alert': '鲸鱼警报',
+            'volume_spike': '成交量异常',
+            'price_move': '价格波动',
+            'signal': '已有币对',
             // 兼容旧类型
-            'Whale Alert': '🐋 鲸鱼警报',
-            'New Listing': '🆕 新上币',
-            'Volume Spike': '📈 成交量异常',
-            'Smart Money': '💰 聪明钱',
-            'cex_listing': '🆕 CEX上币',
-            'dex_pool': '🔄 DEX新池',
-            'telegram': '📱 TG信号',
-            'news': '📰 新闻',
-            'whale': '🐋 鲸鱼',
+            'Whale Alert': '鲸鱼警报',
+            'New Listing': '新上币',
+            'Volume Spike': '成交量异常',
+            'Smart Money': '聪明钱',
+            'cex_listing': 'CEX上币',
+            'dex_pool': 'DEX新池',
+            'telegram': 'TG信号',
+            'news': '新闻',
+            'whale': '鲸鱼',
         };
         
-        // 类型样式映射
+        // 类型样式映射 - 新上币用绿色高亮，已有币对用蓝色
         const typeStyles = {
-            'new_listing': { class: 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500/20', icon: 'sparkles' },
-            'whale_alert': { class: 'bg-purple-100 text-purple-700 ring-1 ring-purple-500/20', icon: 'fish' },
-            'volume_spike': { class: 'bg-amber-100 text-amber-700 ring-1 ring-amber-500/20', icon: 'trending-up' },
-            'price_move': { class: 'bg-blue-100 text-blue-700 ring-1 ring-blue-500/20', icon: 'activity' },
-            'signal': { class: 'bg-slate-100 text-slate-600', icon: 'radio' },
+            'new_listing': { class: 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-400', icon: 'sparkles' },
+            'whale_alert': { class: 'bg-purple-100 text-purple-700', icon: 'fish' },
+            'volume_spike': { class: 'bg-amber-100 text-amber-700', icon: 'trending-up' },
+            'price_move': { class: 'bg-sky-100 text-sky-700', icon: 'activity' },
+            'signal': { class: 'bg-blue-100 text-blue-600', icon: 'bar-chart-2' },
         };
 
         async function loadEvents() {
@@ -1213,15 +1213,20 @@ HTML = '''<!DOCTYPE html>
                     const isNewListing = e.is_new_listing === true || e.is_new_listing === 'true';
                     
                     // 根据事件类型获取样式
-                    const style = typeStyles[eventType] || typeStyles['signal'];
-                    let typeClass = style.class;
-                    let typeIcon = style.icon;
-                    const typeLabel = typeMap[eventType] || typeMap[e.source_type] || '📊 已有币对';
+                    let style, typeClass, typeIcon, typeLabel;
                     
-                    // 新上币额外高亮
                     if (isNewListing) {
-                        typeClass = 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500/30 font-semibold';
-                        typeIcon = 'sparkles';
+                        // 新上币 - 绿色高亮
+                        style = typeStyles['new_listing'];
+                        typeClass = style.class;
+                        typeIcon = style.icon;
+                        typeLabel = '新上币';
+                    } else {
+                        // 已有币对 - 蓝色
+                        style = typeStyles[eventType] || typeStyles['signal'];
+                        typeClass = style.class;
+                        typeIcon = style.icon;
+                        typeLabel = typeMap[eventType] || '已有币对';
                     }
 
                     let scoreColor = 'bg-slate-200';
@@ -1487,8 +1492,8 @@ HTML = '''<!DOCTYPE html>
             const eventType = e.event_type || e.type || 'signal';
             const isNew = e.is_new_listing === true || e.is_new_listing === 'true';
             document.getElementById('detailSource').innerHTML = isNew 
-                ? '<span class="text-emerald-600 font-semibold">🆕 新上币</span>'
-                : `<span>${typeMap[eventType] || typeMap[e.source_type] || '📊 已有币对'}</span>`;
+                ? '<span class="text-emerald-600 font-semibold">新上币</span>'
+                : `<span>${typeMap[eventType] || typeMap[e.source_type] || '已有币对'}</span>`;
             document.getElementById('detailTokenType').textContent = isNew ? '新上市代币' : (e.token_type || '已有币对');
             
             const isTradeable = e.is_tradeable === '1' || e.is_tradeable === true;
