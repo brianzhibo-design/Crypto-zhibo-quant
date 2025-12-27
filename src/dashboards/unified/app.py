@@ -11,7 +11,7 @@ import time
 import csv
 import io
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from flask import Flask, jsonify, render_template_string, request, Response
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -19,7 +19,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+# 允许所有来源访问
+CORS(app, resources={r"/*": {"origins": "*", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]}})
+
+# 北京时区 UTC+8
+BEIJING_TZ = timezone(timedelta(hours=8))
 
 # Redis Config
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
@@ -66,7 +70,8 @@ def health():
     return jsonify({
         'status': 'ok' if r else 'error',
         'version': 'clean-white-1.0',
-        'time': datetime.now().isoformat()
+        'time': datetime.now(BEIJING_TZ).isoformat(),
+        'timezone': 'Asia/Shanghai (UTC+8)'
     })
 
 
@@ -76,7 +81,8 @@ def get_status():
     result = {
         'nodes': {},
         'redis': {'connected': r is not None},
-        'timestamp': datetime.now(timezone.utc).isoformat()
+        'timestamp': datetime.now(BEIJING_TZ).isoformat(),
+        'timezone': 'UTC+8'
     }
 
     if not r:

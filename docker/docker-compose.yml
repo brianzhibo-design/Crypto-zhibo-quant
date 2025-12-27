@@ -6,6 +6,12 @@
 # 剩余 7.5GB 给系统和峰值使用
 
 # ============================================================
+# 全局环境变量 (应用到所有服务)
+# ============================================================
+x-common-env: &common-env
+  TZ: Asia/Shanghai
+
+# ============================================================
 # 网络配置
 # ============================================================
 networks:
@@ -82,10 +88,11 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - MODULE_NAME=exchange_intl
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      <<: *common-env
+      MODULE_NAME: exchange_intl
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     env_file:
       - ../.env
     networks:
@@ -111,10 +118,11 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - MODULE_NAME=exchange_kr
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      <<: *common-env
+      MODULE_NAME: exchange_kr
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     env_file:
       - ../.env
     networks:
@@ -140,16 +148,17 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - MODULE_NAME=blockchain
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - ETH_RPC_URL=${ETHEREUM_RPC_URL}
-      - BSC_RPC_URL=${BSC_RPC_URL}
-      - BASE_RPC_URL=${BASE_RPC_URL}
-      - ARBITRUM_RPC_URL=${ARBITRUM_RPC_URL}
-      - SOLANA_RPC_URL=${SOLANA_RPC_URL}
-      - WALLET_MASTER_PASSWORD=${WALLET_MASTER_PASSWORD}
+      <<: *common-env
+      MODULE_NAME: blockchain
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      ETH_RPC_URL: ${ETHEREUM_RPC_URL}
+      BSC_RPC_URL: ${BSC_RPC_URL}
+      BASE_RPC_URL: ${BASE_RPC_URL}
+      ARBITRUM_RPC_URL: ${ARBITRUM_RPC_URL}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL}
+      WALLET_MASTER_PASSWORD: ${WALLET_MASTER_PASSWORD}
     env_file:
       - ../.env
     volumes:
@@ -177,12 +186,13 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - MODULE_NAME=telegram
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - TELEGRAM_API_ID=${TELEGRAM_API_ID}
-      - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
+      <<: *common-env
+      MODULE_NAME: telegram
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
     env_file:
       - ../.env
     volumes:
@@ -211,10 +221,11 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - MODULE_NAME=news
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      <<: *common-env
+      MODULE_NAME: news
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     env_file:
       - ../.env
     networks:
@@ -242,11 +253,12 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - MODULE_NAME=fusion
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - WALLET_MASTER_PASSWORD=${WALLET_MASTER_PASSWORD}
+      <<: *common-env
+      MODULE_NAME: fusion
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      WALLET_MASTER_PASSWORD: ${WALLET_MASTER_PASSWORD}
     env_file:
       - ../.env
     volumes:
@@ -278,13 +290,14 @@ services:
       fusion:
         condition: service_started
     environment:
-      - MODULE_NAME=pusher
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - WECHAT_WEBHOOK_SIGNAL=${WECHAT_WEBHOOK_SIGNAL}
-      - WECHAT_WEBHOOK_TRADE=${WECHAT_WEBHOOK_TRADE}
-      - WALLET_MASTER_PASSWORD=${WALLET_MASTER_PASSWORD}
+      <<: *common-env
+      MODULE_NAME: pusher
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      WECHAT_WEBHOOK_SIGNAL: ${WECHAT_WEBHOOK_SIGNAL}
+      WECHAT_WEBHOOK_TRADE: ${WECHAT_WEBHOOK_TRADE}
+      WALLET_MASTER_PASSWORD: ${WALLET_MASTER_PASSWORD}
     env_file:
       - ../.env
     volumes:
@@ -315,11 +328,12 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - DASHBOARD_PORT=5000
-      - WALLET_MASTER_PASSWORD=${WALLET_MASTER_PASSWORD}
+      <<: *common-env
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      DASHBOARD_PORT: 5000
+      WALLET_MASTER_PASSWORD: ${WALLET_MASTER_PASSWORD}
     env_file:
       - ../.env
     volumes:
@@ -349,6 +363,8 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
+    environment:
+      <<: *common-env
     volumes:
       - ../deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -373,9 +389,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin123}
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=http://localhost:3000
+      <<: *common-env
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000
     volumes:
       - grafana_data:/var/lib/grafana
     depends_on:
@@ -397,8 +414,9 @@ services:
     container_name: crypto-redis-exporter
     restart: always
     environment:
-      - REDIS_ADDR=redis:6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      <<: *common-env
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     ports:
       - "9121:9121"
     depends_on:
