@@ -2470,6 +2470,13 @@ HTML = '''<!DOCTYPE html>
                         <button onclick="switchChartInterval('4h')" class="chart-interval-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-sky-100">4h</button>
                         <button onclick="switchChartInterval('1d')" class="chart-interval-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-sky-100">1d</button>
                     </div>
+                    <div class="border-l border-slate-200 h-4 mx-1"></div>
+                    <!-- 显示模式切换 -->
+                    <div id="displayModeBtns" class="flex gap-1">
+                        <button onclick="switchDisplayMode('simple')" class="display-mode-btn text-xs px-2 py-1 rounded bg-emerald-500 text-white" title="只显示中轨+MA20+趋势信号">简洁</button>
+                        <button onclick="switchDisplayMode('standard')" class="display-mode-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200" title="显示内侧通道+回踩信号">标准</button>
+                        <button onclick="switchDisplayMode('full')" class="display-mode-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200" title="显示全部指标和信号">完整</button>
+                    </div>
                 </div>
                 <div class="flex items-center gap-2">
                     <button onclick="toggleIndicatorPanel()" class="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition">
@@ -3907,15 +3914,15 @@ HTML = '''<!DOCTYPE html>
         let indicatorConfig = {
             ma: [
                 { enabled: true, period: 20, type: 'EMA', color: '#f59e0b', width: 1.5 },
-                { enabled: true, period: 50, type: 'SMA', color: '#8b5cf6', width: 1.5 },
-                { enabled: false, period: 120, type: 'SMA', color: '#06b6d4', width: 1 },
-                { enabled: false, period: 200, type: 'SMA', color: '#ec4899', width: 1 },
+                { enabled: false, period: 50, type: 'SMA', color: '#8b5cf680', width: 1 },  // 默认关闭，半透明
+                { enabled: false, period: 120, type: 'SMA', color: '#06b6d480', width: 1 },
+                { enabled: false, period: 200, type: 'SMA', color: '#ec489980', width: 1 },
             ],
             masr: {
                 enabled: true,
                 length: 120,
-                innerWidth: 1.9,  // x 内侧通道宽度
-                outerWidth: 8,   // y 外侧通道宽度
+                innerWidth: 1.9,
+                outerWidth: 8,
                 smoothing: 'SMA',
             },
             vwmaLyro: {
@@ -3927,11 +3934,41 @@ HTML = '''<!DOCTYPE html>
             }
         };
         
+        // ==================== 显示模式配置 ====================
+        const DISPLAY_MODES = {
+            simple: {  // 简洁模式 - 默认
+                ma: { showCount: 1 },  // 只显示MA20
+                masr: { showMiddle: true, showInner: false, showOuter: false, showFill: false, bgOpacity: 0.03 },
+                signals: { showTrend: true, showPullback: false, showVWMA: true, showReverse: false }
+            },
+            standard: {  // 标准模式
+                ma: { showCount: 2 },  // 显示MA20, MA50
+                masr: { showMiddle: true, showInner: true, showOuter: false, showFill: false, bgOpacity: 0.05 },
+                signals: { showTrend: true, showPullback: true, showVWMA: true, showReverse: true }
+            },
+            full: {  // 完整模式
+                ma: { showCount: 4 },  // 显示全部
+                masr: { showMiddle: true, showInner: true, showOuter: true, showFill: true, bgOpacity: 0.08 },
+                signals: { showTrend: true, showPullback: true, showVWMA: true, showReverse: true }
+            }
+        };
+        let currentDisplayMode = 'simple';  // 默认简洁模式
+        
+        // 信号过滤配置
+        const SIGNAL_FILTER = {
+            minBarsBetweenPullback: 10,   // 回踩信号最小间隔K线数
+            minPriceChangePercent: 2,     // 或价格变化超过2%可触发
+        };
+        
         // 尝试从 localStorage 加载配置
         try {
             const savedConfig = localStorage.getItem('chartIndicatorConfig');
             if (savedConfig) {
                 indicatorConfig = { ...indicatorConfig, ...JSON.parse(savedConfig) };
+            }
+            const savedMode = localStorage.getItem('chartDisplayMode');
+            if (savedMode && DISPLAY_MODES[savedMode]) {
+                currentDisplayMode = savedMode;
             }
         } catch (e) {}
         
@@ -4338,13 +4375,18 @@ HTML = '''<!DOCTYPE html>
             return scores;
         }
         
-        // 检测 MASR 策略信号
+        // 检测 MASR 策略信号 (带去重)
         function detectMASRSignals(candles, masrData) {
             const signals = [];
             if (!masrData || !masrData.bottom || masrData.bottom.length < 2) return signals;
             
-            // 找到对齐的起始点
+            const mode = DISPLAY_MODES[currentDisplayMode];
             const startIdx = candles.length - masrData.bottom.length;
+            
+            // 去重跟踪
+            let lastBuyIdx = -100, lastSellIdx = -100;
+            let lastBuyPrice = 0, lastSellPrice = 0;
+            let prevTrendUp = null;
             
             for (let i = 1; i < masrData.bottom.length; i++) {
                 const candleIdx = startIdx + i;
@@ -4358,57 +4400,90 @@ HTML = '''<!DOCTYPE html>
                 const prevTop1 = masrData.top1[i-1]?.value;
                 const innerBottom = masrData.bottom[i].value;
                 const innerTop = masrData.top[i].value;
+                const middle = masrData.middle[i].value;
                 
-                // 趋势突破信号：价格突破外侧通道
-                if (prevCandle && prevCandle.close < prevBottom1 && candle.close > bottom1) {
-                    signals.push({
-                        time: candle.time,
-                        position: 'belowBar',
-                        color: '#22c55e',
-                        shape: 'arrowUp',
-                        text: 'Trend BUY'
-                    });
-                } else if (prevCandle && prevCandle.close > prevTop1 && candle.close < top1) {
-                    signals.push({
-                        time: candle.time,
-                        position: 'aboveBar',
-                        color: '#ef4444',
-                        shape: 'arrowDown',
-                        text: 'Trend SELL'
-                    });
+                // 判断当前趋势
+                const trendUp = candle.close > middle;
+                
+                // 趋势转换信号 (只在状态真正变化时)
+                if (mode.signals.showTrend) {
+                    if (prevTrendUp === false && trendUp === true) {
+                        signals.push({
+                            time: candle.time,
+                            position: 'belowBar',
+                            color: '#22c55e',
+                            shape: 'arrowUp',
+                            size: 2,
+                            text: ''  // 简洁样式，不显示文字
+                        });
+                    } else if (prevTrendUp === true && trendUp === false) {
+                        signals.push({
+                            time: candle.time,
+                            position: 'aboveBar',
+                            color: '#ef4444',
+                            shape: 'arrowDown',
+                            size: 2,
+                            text: ''
+                        });
+                    }
                 }
+                prevTrendUp = trendUp;
                 
-                // 回踩信号：价格触及内侧通道
-                if (candle.low <= innerBottom && candle.close > innerBottom) {
-                    signals.push({
-                        time: candle.time,
-                        position: 'belowBar',
-                        color: '#86efac',
-                        shape: 'circle',
-                        text: 'BUY'
-                    });
-                } else if (candle.high >= innerTop && candle.close < innerTop) {
-                    signals.push({
-                        time: candle.time,
-                        position: 'aboveBar',
-                        color: '#fca5a5',
-                        shape: 'circle',
-                        text: 'SELL'
-                    });
+                // 回踩信号 (带间隔过滤)
+                if (mode.signals.showPullback) {
+                    // 买入回踩
+                    if (candle.low <= innerBottom && candle.close > innerBottom) {
+                        const barsSince = i - lastBuyIdx;
+                        const priceChange = lastBuyPrice > 0 ? Math.abs(candle.close - lastBuyPrice) / lastBuyPrice : 1;
+                        
+                        if (barsSince >= SIGNAL_FILTER.minBarsBetweenPullback || 
+                            priceChange >= SIGNAL_FILTER.minPriceChangePercent / 100) {
+                            signals.push({
+                                time: candle.time,
+                                position: 'belowBar',
+                                color: '#86efac',
+                                shape: 'circle',
+                                size: 1,
+                                text: ''
+                            });
+                            lastBuyIdx = i;
+                            lastBuyPrice = candle.close;
+                        }
+                    }
+                    // 卖出回踩
+                    else if (candle.high >= innerTop && candle.close < innerTop) {
+                        const barsSince = i - lastSellIdx;
+                        const priceChange = lastSellPrice > 0 ? Math.abs(candle.close - lastSellPrice) / lastSellPrice : 1;
+                        
+                        if (barsSince >= SIGNAL_FILTER.minBarsBetweenPullback || 
+                            priceChange >= SIGNAL_FILTER.minPriceChangePercent / 100) {
+                            signals.push({
+                                time: candle.time,
+                                position: 'aboveBar',
+                                color: '#fca5a5',
+                                shape: 'circle',
+                                size: 1,
+                                text: ''
+                            });
+                            lastSellIdx = i;
+                            lastSellPrice = candle.close;
+                        }
+                    }
                 }
             }
             
             return signals;
         }
         
-        // 检测 VWMA Lyro RS 信号
+        // 检测 VWMA Lyro RS 信号 (只穿越触发)
         function detectVWMASignals(candles, vwmaData) {
             const signals = [];
             if (!vwmaData || vwmaData.length < 2) return signals;
             
+            const mode = DISPLAY_MODES[currentDisplayMode];
             const startIdx = candles.length - vwmaData.length;
-            const longThreshold = 0.9;
-            const shortThreshold = -0.9;
+            const longThreshold = indicatorConfig.vwmaLyro.longThreshold || 0.9;
+            const shortThreshold = indicatorConfig.vwmaLyro.shortThreshold || -0.9;
             
             for (let i = 1; i < vwmaData.length; i++) {
                 const candleIdx = startIdx + i;
@@ -4418,77 +4493,88 @@ HTML = '''<!DOCTYPE html>
                 const score = vwmaData[i].value;
                 const prevScore = vwmaData[i-1].value;
                 
-                // 多头信号：评分突破阈值
-                if (prevScore < longThreshold && score >= longThreshold) {
-                    signals.push({
-                        time: candle.time,
-                        position: 'belowBar',
-                        color: '#06b6d4',
-                        shape: 'arrowUp',
-                        text: 'Long'
-                    });
+                if (mode.signals.showVWMA) {
+                    // 多头穿越信号
+                    if (prevScore < longThreshold && score >= longThreshold) {
+                        signals.push({
+                            time: candle.time,
+                            position: 'belowBar',
+                            color: '#06b6d4',
+                            shape: 'arrowUp',
+                            size: 2,
+                            text: ''
+                        });
+                    }
+                    // 空头穿越信号
+                    else if (prevScore > shortThreshold && score <= shortThreshold) {
+                        signals.push({
+                            time: candle.time,
+                            position: 'aboveBar',
+                            color: '#f59e0b',
+                            shape: 'arrowDown',
+                            size: 2,
+                            text: ''
+                        });
+                    }
                 }
-                // 空头信号
-                else if (prevScore > shortThreshold && score <= shortThreshold) {
-                    signals.push({
-                        time: candle.time,
-                        position: 'aboveBar',
-                        color: '#f59e0b',
-                        shape: 'arrowDown',
-                        text: 'Short'
-                    });
-                }
-                // 超卖反转
-                else if (prevScore <= shortThreshold && score > shortThreshold) {
-                    signals.push({
-                        time: candle.time,
-                        position: 'belowBar',
-                        color: '#a855f7',
-                        shape: 'circle',
-                        text: 'OS Rev'
-                    });
-                }
-                // 超买反转
-                else if (prevScore >= longThreshold && score < longThreshold) {
-                    signals.push({
-                        time: candle.time,
-                        position: 'aboveBar',
-                        color: '#ec4899',
-                        shape: 'circle',
-                        text: 'OB Rev'
-                    });
+                
+                // 反转信号 (可选)
+                if (mode.signals.showReverse) {
+                    if (prevScore <= shortThreshold && score > shortThreshold) {
+                        signals.push({
+                            time: candle.time,
+                            position: 'belowBar',
+                            color: '#a855f7',
+                            shape: 'circle',
+                            size: 1,
+                            text: ''
+                        });
+                    }
+                    else if (prevScore >= longThreshold && score < longThreshold) {
+                        signals.push({
+                            time: candle.time,
+                            position: 'aboveBar',
+                            color: '#ec4899',
+                            shape: 'circle',
+                            size: 1,
+                            text: ''
+                        });
+                    }
                 }
             }
             
             return signals;
         }
         
-        // 融合两个策略的信号
+        // 融合两个策略的信号 (优化版)
         function fuseStrategySignals(masrSignals, vwmaSignals) {
             const fused = [];
             const timeWindow = 60 * 60 * 4; // 4小时窗口
             
             // 找到强信号：两个策略在同一时间窗口内都发出同方向信号
             for (const m of masrSignals) {
-                if (m.text.includes('Trend')) {
-                    const isBuy = m.text.includes('BUY');
-                    
-                    // 在 VWMA 信号中查找对应信号
-                    const matching = vwmaSignals.find(v => {
-                        const timeDiff = Math.abs(v.time - m.time);
-                        const samDirection = (isBuy && v.text === 'Long') || (!isBuy && v.text === 'Short');
-                        return timeDiff <= timeWindow && samDirection;
+                // 趋势信号 (arrowUp = 买入, arrowDown = 卖出)
+                const isTrend = m.shape === 'arrowUp' || m.shape === 'arrowDown';
+                if (!isTrend) continue;
+                
+                const isBuy = m.shape === 'arrowUp';
+                
+                // 在 VWMA 信号中查找对应信号
+                const matching = vwmaSignals.find(v => {
+                    const timeDiff = Math.abs(v.time - m.time);
+                    const sameDirection = (isBuy && v.shape === 'arrowUp') || (!isBuy && v.shape === 'arrowDown');
+                    return timeDiff <= timeWindow && sameDirection;
+                });
+                
+                if (matching) {
+                    fused.push({
+                        time: m.time,
+                        position: isBuy ? 'belowBar' : 'aboveBar',
+                        color: isBuy ? '#10b981' : '#f43f5e',  // 更柔和的颜色
+                        shape: 'square',
+                        size: 2,
+                        text: ''  // 保持简洁
                     });
-                    
-                    if (matching) {
-                        fused.push({
-                            time: m.time,
-                            position: isBuy ? 'belowBar' : 'aboveBar',
-                            color: isBuy ? '#00ff00' : '#ff0000',
-                            shape: 'square',
-                            text: isBuy ? '★ STRONG BUY' : '★ STRONG SELL'
-                        });
-                    }
                 }
             }
             
@@ -4778,12 +4864,15 @@ HTML = '''<!DOCTYPE html>
             maSeries = {};
             masrChannelSeries = {};
             
-            // 创建均线系列
+            // 获取当前显示模式配置
+            const mode = DISPLAY_MODES[currentDisplayMode];
+            
+            // 创建均线系列 (根据模式限制数量)
             indicatorConfig.ma.forEach((cfg, idx) => {
-                if (cfg.enabled) {
+                if (cfg.enabled && idx < mode.ma.showCount) {
                     maSeries[`ma${idx}`] = chart.addLineSeries({
                         color: cfg.color,
-                        lineWidth: cfg.width,
+                        lineWidth: idx === 0 ? cfg.width : 1,  // 主均线粗，辅助均线细
                         priceLineVisible: false,
                         lastValueVisible: false,
                         crosshairMarkerVisible: false,
@@ -4791,48 +4880,52 @@ HTML = '''<!DOCTYPE html>
                 }
             });
             
-            // 创建 MASR 通道系列
+            // 创建 MASR 通道系列 (根据模式显示不同元素)
             if (indicatorConfig.masr.enabled) {
-                // 内侧通道 - 支撑
-                masrChannelSeries.bottom = chart.addLineSeries({
-                    color: '#22c55e',
-                    lineWidth: 1,
-                    lineStyle: 0,
-                    priceLineVisible: false,
-                    lastValueVisible: false,
-                });
-                // 内侧通道 - 阻力
-                masrChannelSeries.top = chart.addLineSeries({
-                    color: '#ef4444',
-                    lineWidth: 1,
-                    lineStyle: 0,
-                    priceLineVisible: false,
-                    lastValueVisible: false,
-                });
-                // 外侧通道 - 支撑
-                masrChannelSeries.bottom1 = chart.addLineSeries({
-                    color: '#16a34a',
-                    lineWidth: 2,
-                    lineStyle: 0,
-                    priceLineVisible: false,
-                    lastValueVisible: false,
-                });
-                // 外侧通道 - 阻力
-                masrChannelSeries.top1 = chart.addLineSeries({
-                    color: '#dc2626',
-                    lineWidth: 2,
-                    lineStyle: 0,
-                    priceLineVisible: false,
-                    lastValueVisible: false,
-                });
-                // 中轨
-                masrChannelSeries.basis = chart.addLineSeries({
-                    color: '#eab308',
-                    lineWidth: 1.5,
-                    lineStyle: 0,
-                    priceLineVisible: false,
-                    lastValueVisible: false,
-                });
+                // 内侧通道 (标准/完整模式)
+                if (mode.masr.showInner) {
+                    masrChannelSeries.bottom = chart.addLineSeries({
+                        color: '#22c55e80',  // 半透明绿
+                        lineWidth: 1,
+                        lineStyle: 0,
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                    masrChannelSeries.top = chart.addLineSeries({
+                        color: '#ef444480',  // 半透明红
+                        lineWidth: 1,
+                        lineStyle: 0,
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                }
+                // 外侧通道 (完整模式)
+                if (mode.masr.showOuter) {
+                    masrChannelSeries.bottom1 = chart.addLineSeries({
+                        color: '#16a34a66',  // 更透明绿
+                        lineWidth: 1,
+                        lineStyle: 2,  // 虚线
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                    masrChannelSeries.top1 = chart.addLineSeries({
+                        color: '#dc262666',  // 更透明红
+                        lineWidth: 1,
+                        lineStyle: 2,  // 虚线
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                }
+                // 中轨 (始终显示)
+                if (mode.masr.showMiddle) {
+                    masrChannelSeries.basis = chart.addLineSeries({
+                        color: '#eab308',
+                        lineWidth: 1.5,
+                        lineStyle: 2,  // 虚线更清晰
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                }
             }
             
             // 加载历史数据
@@ -5168,6 +5261,39 @@ HTML = '''<!DOCTYPE html>
             if (currentChartSymbol) {
                 document.getElementById('chartLoading').classList.remove('hidden');
                 loadHistoricalKlines(currentChartSymbol, currentChartInterval, currentChartExchange);
+            }
+        }
+        
+        // 切换显示模式
+        function switchDisplayMode(mode) {
+            if (!DISPLAY_MODES[mode]) return;
+            currentDisplayMode = mode;
+            
+            // 保存到 localStorage
+            try {
+                localStorage.setItem('chartDisplayMode', mode);
+            } catch (e) {}
+            
+            // 更新按钮样式
+            document.querySelectorAll('.display-mode-btn').forEach(btn => {
+                btn.classList.remove('bg-emerald-500', 'text-white');
+                btn.classList.add('bg-slate-100');
+            });
+            const targetBtn = event?.target;
+            if (targetBtn) {
+                targetBtn.classList.remove('bg-slate-100');
+                targetBtn.classList.add('bg-emerald-500', 'text-white');
+            }
+            
+            // 重新加载图表以应用新模式
+            if (currentChartSymbol && chart) {
+                // 需要重建图表系列
+                const container = document.getElementById('tokenChart');
+                if (container) {
+                    chart.remove();
+                    chart = null;
+                    loadTokenChart(currentChartSymbol, currentChartExchange);
+                }
             }
         }
         
