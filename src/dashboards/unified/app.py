@@ -1353,11 +1353,15 @@ def get_whale_leaderboard():
     
     # 确保有数据
     if not _whale_analytics_cache:
-        # 触发加载
-        get_whale_analytics()
+        # 触发加载（忽略返回值，只是为了填充缓存）
+        try:
+            get_whale_analytics()
+        except Exception as e:
+            logger.warning(f"加载分析数据失败: {e}")
     
     analytics_list = list(_whale_analytics_cache.values())
     
+    # 如果仍然没有数据，返回空排行榜
     if not analytics_list:
         return jsonify({
             'success': True,
@@ -1365,7 +1369,8 @@ def get_whale_leaderboard():
                 'by_score': [],
                 'by_win_rate': [],
                 'by_pnl': [],
-            }
+            },
+            'message': '暂无数据 - 巨鲸监控正在采集中'
         })
     
     try:
