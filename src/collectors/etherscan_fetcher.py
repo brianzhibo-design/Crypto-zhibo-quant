@@ -13,22 +13,28 @@ from typing import List, Dict, Optional, Any
 
 logger = logging.getLogger('etherscan_fetcher')
 
-# Etherscan API 配置
+# Etherscan API 配置 (V2 API)
 ETHERSCAN_API_KEY = os.getenv('ETHERSCAN_API_KEY', '')
-ETHERSCAN_BASE_URL = 'https://api.etherscan.io/api'
+ETHERSCAN_BASE_URL = 'https://api.etherscan.io/v2/api'  # V2 API
 
-# 备用 API Keys (如果主 Key 限速)
-BACKUP_API_KEYS = [
-    # 可以添加多个备用 key
-]
+# 链 ID 配置
+CHAIN_IDS = {
+    'ethereum': 1,
+    'bsc': 56,
+    'polygon': 137,
+    'arbitrum': 42161,
+    'optimism': 10,
+    'base': 8453,
+}
 
 
 class EtherscanFetcher:
-    """Etherscan API 数据获取器"""
+    """Etherscan API 数据获取器 (V2)"""
     
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, chain: str = 'ethereum'):
         self.api_key = api_key or ETHERSCAN_API_KEY
         self.base_url = ETHERSCAN_BASE_URL
+        self.chain_id = CHAIN_IDS.get(chain, 1)
         self.rate_limit_delay = 0.21  # 5次/秒限制，加点余量
         self.session = None
         self._request_count = 0
@@ -54,7 +60,9 @@ class EtherscanFetcher:
         if not self.api_key:
             logger.warning("未配置 ETHERSCAN_API_KEY，跳过请求")
             return None
-            
+        
+        # V2 API 需要 chainid 和 apikey
+        params['chainid'] = self.chain_id
         params['apikey'] = self.api_key
         
         session = await self._get_session()
