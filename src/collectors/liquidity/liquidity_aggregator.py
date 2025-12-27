@@ -441,21 +441,21 @@ class LiquidityAggregator:
         
         return alerts
     
-    async def save_to_redis(self, snapshot: LiquiditySnapshot, alerts: List[LiquidityAlert]):
-        """保存到 Redis"""
+    def save_to_redis(self, snapshot: LiquiditySnapshot, alerts: List[LiquidityAlert]):
+        """保存到 Redis (同步)"""
         if not self.redis:
             return
         
         try:
             # 保存最新快照
-            await self.redis.set(
+            self.redis.set(
                 'liquidity:snapshot:latest',
                 json.dumps(asdict(snapshot)),
                 ex=3600  # 1小时过期
             )
             
             # 保存关键指标 (供其他模块快速访问)
-            await self.redis.hset('liquidity:metrics', mapping={
+            self.redis.hset('liquidity:metrics', mapping={
                 'index': str(snapshot.liquidity_index),
                 'level': snapshot.liquidity_level,
                 'risk': snapshot.risk_level,
@@ -468,12 +468,12 @@ class LiquidityAggregator:
             # 保存预警
             if alerts:
                 for alert in alerts:
-                    await self.redis.lpush(
+                    self.redis.lpush(
                         'liquidity:alerts:recent',
                         json.dumps(asdict(alert))
                     )
                 # 保留最近 100 条
-                await self.redis.ltrim('liquidity:alerts:recent', 0, 99)
+                self.redis.ltrim('liquidity:alerts:recent', 0, 99)
             
             logger.info(f"流动性数据已保存到 Redis: 指数={snapshot.liquidity_index}, 预警={len(alerts)}条")
             
@@ -495,8 +495,8 @@ class LiquidityAggregator:
         # 保存历史
         self._history['last_snapshot'] = snapshot
         
-        # 保存到 Redis
-        await self.save_to_redis(snapshot, alerts)
+        # 保存到 Redis (同步调用)
+        self.save_to_redis(snapshot, alerts)
         
         # 日志
         logger.info(f"流动性快照: 指数={snapshot.liquidity_index:.1f} ({snapshot.liquidity_level}), "

@@ -28,8 +28,12 @@ class LiquidityService:
             self._aggregator = LiquidityAggregator(redis_client=self.redis)
         return self._aggregator
     
-    def get_latest_snapshot(self) -> Dict:
-        """获取最新的流动性快照"""
+    def get_latest_snapshot(self, auto_refresh: bool = True) -> Dict:
+        """获取最新的流动性快照
+        
+        Args:
+            auto_refresh: 如果没有缓存数据，是否自动刷新
+        """
         if not self.redis:
             return self._get_empty_snapshot()
         
@@ -39,7 +43,18 @@ class LiquidityService:
             if data:
                 return json.loads(data)
             
-            # 如果没有数据，返回空数据（前端应优雅处理）
+            # 如果没有数据且允许自动刷新，实时获取
+            if auto_refresh:
+                logger.info("Redis 无流动性数据，开始实时获取...")
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    result = loop.run_until_complete(self.refresh_data())
+                    if 'error' not in result:
+                        return result
+                finally:
+                    loop.close()
+            
             return self._get_empty_snapshot()
         except Exception as e:
             logger.error(f"获取流动性快照失败: {e}")
