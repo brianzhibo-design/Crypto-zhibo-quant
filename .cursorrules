@@ -1,0 +1,126 @@
+# Cursor 开发规则 - Crypto Monitor
+
+## 🚫 禁止行为
+
+### 1. 禁止使用 mock/fake/dummy 数据
+- 不要创建 mock_data.py, fake_api.py 等文件
+- 不要在代码中硬编码假数据
+- 不要用 random 生成假行情数据
+- 不要用 time.sleep() 模拟 API 延迟
+
+### 2. 禁止跳过真实实现
+- 不要写 `# TODO: implement later`
+- 不要写 `pass` 占位符
+- 不要写 `return mock_response()`
+- 不要写示例/样例响应
+
+### 3. 禁止假装完成
+- 不要说"已完成"但实际用的是假数据
+- 不要用固定值模拟动态数据
+
+---
+
+## ✅ 必须行为
+
+### 1. 使用真实 API
+- 如果需要 API Key，明确告诉用户需要什么
+- 如果 API 有限制，告诉用户限制是什么
+- 如果 API 不可用，告诉用户并提供替代方案
+
+### 2. 明确依赖
+- 列出所有需要的 API Key
+- 列出所有需要的环境变量
+- 列出所有需要安装的依赖
+
+### 3. 验证可行性
+- 提供测试命令验证 API 是否正常
+- 确保代码能直接运行
+
+---
+
+## 📊 可用的免费 API
+
+### 交易所官方 API（无需 Key）
+
+```python
+EXCHANGE_APIS = {
+    'binance': {
+        'ticker': 'https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}',
+        'all_tickers': 'https://api.binance.com/api/v3/ticker/24hr',
+        'depth': 'https://api.binance.com/api/v3/depth?symbol={symbol}&limit=20',
+        'limit': '1200次/分钟',
+    },
+    'okx': {
+        'ticker': 'https://www.okx.com/api/v5/market/ticker?instId={symbol}',
+        'all_tickers': 'https://www.okx.com/api/v5/market/tickers?instType=SPOT',
+        'limit': '20次/2秒',
+    },
+    'bybit': {
+        'ticker': 'https://api.bybit.com/v5/market/tickers?category=spot&symbol={symbol}',
+        'all_tickers': 'https://api.bybit.com/v5/market/tickers?category=spot',
+        'limit': '120次/秒',
+    },
+    'gate': {
+        'ticker': 'https://api.gateio.ws/api/v4/spot/tickers?currency_pair={symbol}',
+        'all_tickers': 'https://api.gateio.ws/api/v4/spot/tickers',
+    },
+    'upbit': {
+        'ticker': 'https://api.upbit.com/v1/ticker?markets={symbol}',
+        'limit': '10次/秒',
+    },
+}
+```
+
+### 聚合数据 API（免费）
+
+```python
+AGGREGATOR_APIS = {
+    'coingecko': 'https://api.coingecko.com/api/v3/',
+    'dexscreener': 'https://api.dexscreener.com/latest/dex/',
+    'fear_greed': 'https://api.alternative.me/fng/',
+}
+```
+
+---
+
+## 🔍 如何识别假数据
+
+```python
+# ❌ 假数据特征：
+price = 50000.00  # 硬编码
+price = random.uniform(49000, 51000)  # random 生成
+from mock_data import get_ticker  # mock 文件
+await asyncio.sleep(0.5)  # 模拟延迟
+
+# ✅ 真实数据特征：
+async with session.get(url) as resp:
+    data = await resp.json()  # 实际 HTTP 请求
+```
+
+---
+
+## 📋 项目特定规则
+
+### Redis 数据结构
+- `known_pairs:{exchange}` - Set，已知交易对
+- `contracts:{symbol}` - Hash，合约地址信息
+- `events:raw` / `events:fused` - Stream，事件流
+- `node:heartbeat:{node}` - Hash，节点心跳
+
+### 代币分类
+- major: 主流币 (BTC, ETH, SOL...)
+- meme: Meme币 (DOGE, SHIB, PEPE...)
+- defi: DeFi (UNI, AAVE, MKR...)
+- layer2: Layer2 (ARB, OP, MATIC...)
+- ai: AI/Gaming (FET, RNDR, AXS...)
+- stable: 稳定币 (USDT, USDC...)
+
+### 评分体系
+- 使用 v4/v5 评分引擎
+- 来源评分 + 交易所乘数 + 事件类型 + 多源加分
+
+### 部署
+- 仅使用 Docker 部署
+- 时区：Asia/Shanghai (UTC+8)
+- Redis 密码：从环境变量读取
+

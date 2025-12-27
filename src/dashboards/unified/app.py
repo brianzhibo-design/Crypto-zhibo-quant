@@ -65,6 +65,27 @@ NEW_PAIR_KEYWORDS = [
     '新增交易对', '交易对',
 ]
 
+# ============================================================
+# 代币分类定义
+# ============================================================
+TOKEN_CATEGORIES = {
+    'major': {'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'AVAX', 'DOT', 'LINK', 'MATIC', 'TRX', 'LTC', 'BCH', 'ATOM', 'ICP', 'FIL', 'ETC', 'APT', 'NEAR', 'STX', 'INJ', 'HBAR', 'VET', 'ALGO', 'FTM', 'EGLD', 'FLOW', 'XLM', 'XMR', 'EOS', 'THETA', 'SUI', 'SEI', 'TIA', 'TON', 'DYDX'},
+    'meme': {'DOGE', 'SHIB', 'PEPE', 'FLOKI', 'BONK', 'WIF', 'BOME', 'MEME', 'BABYDOGE', 'ELON', 'KISHU', 'TURBO', 'LADYS', 'WOJAK', 'BRETT', 'SLERF', 'MEW', 'POPCAT', 'MOG', 'SPX', 'NEIRO', 'GOAT', 'PNUT', 'ACT', 'FWOG', 'MOODENG', 'GIGA', 'MOTHER', 'PUNT'},
+    'defi': {'UNI', 'AAVE', 'SUSHI', 'COMP', 'MKR', 'CRV', 'SNX', 'YFI', '1INCH', 'CAKE', 'DYDX', 'LDO', 'RPL', 'GMX', 'PENDLE', 'BLUR', 'JUP', 'RAY', 'ORCA', 'RDNT', 'EIGEN', 'ENA', 'ETHFI', 'RENZO'},
+    'layer2': {'ARB', 'OP', 'MATIC', 'IMX', 'LRC', 'STRK', 'ZK', 'MANTA', 'METIS', 'BOBA', 'SKL', 'CELR', 'MODE', 'SCROLL', 'BLAST', 'LINEA', 'ZKSYNC', 'TAIKO', 'ZRO'},
+    'ai': {'FET', 'RNDR', 'AGIX', 'OCEAN', 'TAO', 'ARKM', 'WLD', 'AIOZ', 'NMR', 'CTXC', 'VIRTUAL', 'AI16Z', 'ARC', 'GRASS', 'COOKIE', 'SWARMS', 'FARTCOIN', 'GRIFFAIN', 'ZEREBRO', 'AIXBT', 'GOAT'},
+    'gaming': {'AXS', 'SAND', 'MANA', 'GALA', 'ENJ', 'IMX', 'MAGIC', 'PRIME', 'PIXEL', 'PORTAL', 'RONIN', 'XAI', 'BEAM', 'SUPER', 'YGG', 'ILV', 'GODS', 'BIGTIME', 'NOT', 'CATI'},
+    'stable': {'USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'USDD', 'FRAX', 'GUSD', 'LUSD', 'FDUSD', 'PYUSD', 'EURC', 'EURT'},
+}
+
+def get_token_category(symbol: str) -> str:
+    """获取代币分类"""
+    symbol = symbol.upper()
+    for cat, symbols in TOKEN_CATEGORIES.items():
+        if symbol in symbols:
+            return cat
+    return 'other'
+
 
 def extract_base_symbol(symbol: str) -> str:
     """从交易对中提取基础代币符号
@@ -192,14 +213,161 @@ NODES = {
 EXCHANGES = ['binance', 'okx', 'bybit', 'kucoin', 'gate', 'bitget', 'upbit', 'bithumb', 'coinbase', 'kraken', 'mexc', 'htx']
 
 
+# 本地测试模式：当真实 Redis 不可用时使用 fakeredis
+USE_FAKE_REDIS = os.getenv("USE_FAKE_REDIS", "").lower() in ("1", "true", "yes")
+_fake_redis_instance = None
+
 def get_redis():
+    global _fake_redis_instance
+    
+    # 优先尝试真实 Redis
+    if not USE_FAKE_REDIS:
+        try:
+            r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD,
+                            decode_responses=True, socket_timeout=5)
+            r.ping()
+            return r
+        except:
+            pass
+    
+    # 使用 fakeredis 作为备用（本地测试）
     try:
-        r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD,
-                        decode_responses=True, socket_timeout=5)
-        r.ping()
-        return r
-    except:
+        import fakeredis
+        if _fake_redis_instance is None:
+            _fake_redis_instance = fakeredis.FakeRedis(decode_responses=True)
+            # 注入一些测试数据
+            _init_test_data(_fake_redis_instance)
+        return _fake_redis_instance
+    except ImportError:
         return None
+
+def _init_test_data(r):
+    """初始化测试数据"""
+    import time
+    
+    # 添加一些测试交易对
+    test_pairs = {
+        'binance': ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'PEPEUSDT', 'ARBUSDT', 'OPUSDT', 'WIFUSDT'],
+        'okx': ['BTC-USDT', 'ETH-USDT', 'SOL-USDT', 'DOGE-USDT', 'PEPE-USDT', 'ARB-USDT'],
+        'bybit': ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'DOGEUSDT', 'PEPEUSDT'],
+        'upbit': ['KRW-BTC', 'KRW-ETH', 'KRW-SOL', 'KRW-DOGE', 'KRW-XRP'],
+        'gate': ['BTC_USDT', 'ETH_USDT', 'DOGE_USDT', 'PEPE_USDT', 'BONK_USDT'],
+    }
+    
+    for ex, pairs in test_pairs.items():
+        for pair in pairs:
+            r.sadd(f'known_pairs:{ex}', pair)
+    
+    # 添加合约地址数据（真实合约地址）
+    test_contracts = {
+        'PEPE': {
+            'contract_address': '0x6982508145454Ce325dDbE47a25d4ec3d2311933',
+            'chain': 'ethereum',
+            'liquidity_usd': '125000000',
+            'volume_24h': '85000000',
+            'price': '0.00000405',
+            'dex': 'uniswap_v3',
+            'source': 'dexscreener',
+        },
+        'DOGE': {
+            'contract_address': 'native',  # DOGE 是原生币
+            'chain': 'dogecoin',
+            'liquidity_usd': '0',
+            'volume_24h': '500000000',
+            'price': '0.32',
+            'dex': 'cex',
+            'source': 'coingecko',
+        },
+        'WIF': {
+            'contract_address': 'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm',
+            'chain': 'solana',
+            'liquidity_usd': '45000000',
+            'volume_24h': '120000000',
+            'price': '2.15',
+            'dex': 'raydium',
+            'source': 'dexscreener',
+        },
+        'BONK': {
+            'contract_address': 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+            'chain': 'solana',
+            'liquidity_usd': '28000000',
+            'volume_24h': '65000000',
+            'price': '0.0000285',
+            'dex': 'raydium',
+            'source': 'dexscreener',
+        },
+        'ARB': {
+            'contract_address': '0x912CE59144191C1204E64559FE8253a0e49E6548',
+            'chain': 'arbitrum',
+            'liquidity_usd': '85000000',
+            'volume_24h': '150000000',
+            'price': '0.85',
+            'dex': 'uniswap_v3',
+            'source': 'dexscreener',
+        },
+        'OP': {
+            'contract_address': '0x4200000000000000000000000000000000000042',
+            'chain': 'optimism',
+            'liquidity_usd': '65000000',
+            'volume_24h': '95000000',
+            'price': '1.95',
+            'dex': 'velodrome',
+            'source': 'dexscreener',
+        },
+        'SOL': {
+            'contract_address': 'native',
+            'chain': 'solana',
+            'liquidity_usd': '0',
+            'volume_24h': '2500000000',
+            'price': '195.50',
+            'dex': 'cex',
+            'source': 'coingecko',
+        },
+        'ETH': {
+            'contract_address': 'native',
+            'chain': 'ethereum',
+            'liquidity_usd': '0',
+            'volume_24h': '15000000000',
+            'price': '3450.00',
+            'dex': 'cex',
+            'source': 'coingecko',
+        },
+        'BTC': {
+            'contract_address': 'native',
+            'chain': 'bitcoin',
+            'liquidity_usd': '0',
+            'volume_24h': '35000000000',
+            'price': '98500.00',
+            'dex': 'cex',
+            'source': 'coingecko',
+        },
+    }
+    
+    for symbol, data in test_contracts.items():
+        r.hset(f'contracts:{symbol}', mapping=data)
+    
+    # 添加节点心跳
+    now = int(time.time() * 1000)
+    for node in ['exchange_intl', 'exchange_kr', 'blockchain', 'telegram', 'news', 'fusion', 'pusher']:
+        r.hset(f'node:heartbeat:{node}', mapping={
+            'last_ts': now,
+            'status': 'running',
+            'events': '0',
+        })
+    
+    # 添加一些测试事件
+    test_events = [
+        {'symbol': 'PEPE', 'exchange': 'binance', 'event_type': 'new_coin', 'score': 85, 'source': 'telegram', 'raw_text': 'Binance will list PEPE'},
+        {'symbol': 'WIF', 'exchange': 'upbit', 'event_type': 'new_coin', 'score': 78, 'source': 'rest_api', 'raw_text': 'Upbit listing WIF'},
+        {'symbol': 'BONK', 'exchange': 'okx', 'event_type': 'new_pair', 'score': 45, 'source': 'websocket', 'raw_text': 'New trading pair BONK-USDT'},
+    ]
+    
+    for i, evt in enumerate(test_events):
+        evt['ts'] = now - i * 60000  # 每个事件间隔1分钟
+        evt['id'] = f'test-{i}'
+        r.xadd('events:fused', evt, maxlen=1000)
+    
+    print("✅ 测试数据已初始化（含合约地址）")
 
 
 def now_ms():
@@ -591,11 +759,6 @@ def get_all_tokens():
             if len(base_symbol) < 2 or len(base_symbol) > 15:
                 continue
             
-            # 过滤稳定币
-            stablecoins = {'USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'USDP', 'GUSD', 'FRAX', 'LUSD'}
-            if base_symbol in stablecoins:
-                continue
-            
             if base_symbol not in token_map:
                 token_map[base_symbol] = {
                     'symbol': base_symbol,
@@ -621,7 +784,7 @@ def get_all_tokens():
                 elif ex_info['tier'] == 'B':
                     token_map[base_symbol]['tier_b_count'] += 1
     
-    # 获取合约信息
+    # 获取合约信息和分类
     for symbol, data in token_map.items():
         contract_data = r.hgetall(f'contracts:{symbol}')
         if contract_data:
@@ -629,13 +792,16 @@ def get_all_tokens():
             data['chain'] = contract_data.get('chain', '')
             data['liquidity_usd'] = float(contract_data.get('liquidity_usd', 0) or 0)
             data['dex'] = contract_data.get('dex', '')
+            data['first_seen'] = int(contract_data.get('first_seen', 0) or 0)
         else:
             data['contract_address'] = ''
             data['chain'] = ''
             data['liquidity_usd'] = 0
             data['dex'] = ''
+            data['first_seen'] = 0
         
         data['exchange_count'] = len(data['exchanges'])
+        data['category'] = get_token_category(symbol)
     
     # 转换为列表
     tokens = list(token_map.values())
@@ -937,16 +1103,29 @@ def get_cross_exchange(symbol):
     tier_s = [ex for ex in exchanges_found if ex['tier'] == 'S']
     tier_a = [ex for ex in exchanges_found if ex['tier'] == 'A']
     
+    # 获取代币类别
+    category = get_token_category(symbol)
+    
+    # 流动性转换
+    liquidity = contract_data.get('liquidity_usd', '')
+    try:
+        liquidity = float(liquidity) if liquidity else 0
+    except:
+        liquidity = 0
+    
     return jsonify({
+        'found': len(exchanges_found) > 0,
         'symbol': symbol,
+        'category': category,
         'exchange_count': len(exchanges_found),
         'weight_score': weight_score,
         'tier_s_count': len(tier_s),
         'tier_a_count': len(tier_a),
-        'exchanges': exchanges_found,
+        'exchanges': [ex['exchange'] for ex in exchanges_found],
+        'exchanges_detail': exchanges_found,
         'contract_address': contract_data.get('contract_address', ''),
         'chain': contract_data.get('chain', ''),
-        'liquidity_usd': contract_data.get('liquidity_usd', ''),
+        'liquidity_usd': liquidity,
         'total_pairs': len(set(all_pairs))
     })
 
@@ -1516,6 +1695,7 @@ HTML = '''<!DOCTYPE html>
     <title>加密货币监控 | 实时仪表板</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
@@ -1855,40 +2035,150 @@ HTML = '''<!DOCTYPE html>
         <div class="card p-6 w-full max-w-4xl mx-4 max-h-[85vh] overflow-hidden flex flex-col">
             <div class="flex justify-between items-center mb-4">
                 <div>
-                    <h3 id="pairsModalTitle" class="font-semibold text-slate-700 text-lg">已知交易对</h3>
-                    <p id="pairsModalSubtitle" class="text-sm text-slate-400">共 0 个交易对</p>
+                    <h3 id="pairsModalTitle" class="font-semibold text-slate-700 text-lg">代币列表</h3>
+                    <p id="pairsModalSubtitle" class="text-sm text-slate-400">选择类别查看</p>
                 </div>
                 <button onclick="closePairsModal()" class="text-slate-400 hover:text-slate-600 transition-colors p-2 hover:bg-slate-100 rounded-lg">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
             
-            <!-- 交易所选择 -->
+            <!-- 代币类别选择 -->
             <div class="flex flex-wrap gap-2 mb-4">
-                <button onclick="showAllTokens()" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-colors font-bold" data-ex="all">全部代币（融合）</button>
-                <button onclick="loadPairs('binance')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="binance">Binance</button>
-                <button onclick="loadPairs('okx')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="okx">OKX</button>
-                <button onclick="loadPairs('bybit')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="bybit">Bybit</button>
-                <button onclick="loadPairs('gate')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="gate">Gate</button>
-                <button onclick="loadPairs('kucoin')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="kucoin">KuCoin</button>
-                <button onclick="loadPairs('bitget')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="bitget">Bitget</button>
-                <button onclick="loadPairs('upbit')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="upbit">Upbit</button>
-                <button onclick="loadPairs('bithumb')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="bithumb">Bithumb</button>
-                <button onclick="loadPairs('mexc')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="mexc">MEXC</button>
-                <button onclick="loadPairs('htx')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="htx">HTX</button>
+                <button onclick="filterByCategory('all')" class="cat-btn px-3 py-1.5 text-xs font-medium bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-colors font-bold" data-cat="all">🌐 全部</button>
+                <button onclick="filterByCategory('major')" class="cat-btn px-3 py-1.5 text-xs font-medium bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg transition-colors" data-cat="major">⭐ 主流币</button>
+                <button onclick="filterByCategory('meme')" class="cat-btn px-3 py-1.5 text-xs font-medium bg-pink-100 hover:bg-pink-200 text-pink-700 rounded-lg transition-colors" data-cat="meme">🐕 Meme</button>
+                <button onclick="filterByCategory('defi')" class="cat-btn px-3 py-1.5 text-xs font-medium bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors" data-cat="defi">🏦 DeFi</button>
+                <button onclick="filterByCategory('layer2')" class="cat-btn px-3 py-1.5 text-xs font-medium bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-lg transition-colors" data-cat="layer2">🔗 Layer2</button>
+                <button onclick="filterByCategory('ai')" class="cat-btn px-3 py-1.5 text-xs font-medium bg-cyan-100 hover:bg-cyan-200 text-cyan-700 rounded-lg transition-colors" data-cat="ai">🤖 AI/Gaming</button>
+                <button onclick="filterByCategory('new')" class="cat-btn px-3 py-1.5 text-xs font-medium bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition-colors" data-cat="new">🚀 新币</button>
+                <button onclick="filterByCategory('stable')" class="cat-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors" data-cat="stable">💵 稳定币</button>
             </div>
             
             <!-- 搜索框 -->
-            <input id="pairsSearch" type="text" placeholder="搜索交易对..." 
+            <input id="pairsSearch" type="text" placeholder="搜索代币..." 
                    class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 mb-4"
                    onkeyup="filterPairs()">
             
-            <!-- 交易对列表 -->
+            <!-- 代币列表 -->
             <div id="pairsList" class="flex-1 overflow-y-auto scrollbar">
                 <div class="text-center text-slate-400 py-8">
-                    <i data-lucide="database" class="w-12 h-12 mx-auto mb-4 text-slate-300"></i>
-                    <p>选择交易所查看已知交易对</p>
+                    <i data-lucide="coins" class="w-12 h-12 mx-auto mb-4 text-slate-300"></i>
+                    <p>选择类别查看代币</p>
                 </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Token Detail Modal 代币详情弹窗（实时行情） -->
+    <div id="tokenDetailModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50" onclick="if(event.target===this)closeTokenDetail()">
+        <div class="card p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center gap-3">
+                    <div id="tokenIcon" class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-bold text-xl">?</div>
+                    <div>
+                        <h3 id="tokenSymbol" class="font-bold text-2xl text-slate-800">TOKEN</h3>
+                        <div id="tokenCategory" class="text-sm text-slate-400">加载中...</div>
+                    </div>
+                </div>
+                <button onclick="closeTokenDetail()" class="text-slate-400 hover:text-slate-600 transition-colors p-2 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <!-- 实时价格卡片 -->
+            <div id="tokenPriceCards" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div class="bg-slate-50 rounded-xl p-4 text-center">
+                    <div class="text-xs text-slate-400 mb-1">当前价格</div>
+                    <div id="tokenPrice" class="font-bold text-2xl text-slate-800">--</div>
+                    <div id="tokenChange" class="text-sm text-green-600">--%</div>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-4 text-center">
+                    <div class="text-xs text-slate-400 mb-1">24h 最高</div>
+                    <div id="tokenHigh" class="font-bold text-lg text-slate-700">--</div>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-4 text-center">
+                    <div class="text-xs text-slate-400 mb-1">24h 最低</div>
+                    <div id="tokenLow" class="font-bold text-lg text-slate-700">--</div>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-4 text-center">
+                    <div class="text-xs text-slate-400 mb-1">24h 成交量</div>
+                    <div id="tokenVolume" class="font-bold text-lg text-slate-700">--</div>
+                </div>
+            </div>
+            
+            <!-- 图表控制栏 -->
+            <div class="flex items-center justify-between mb-2 px-2">
+                <div class="flex items-center gap-2">
+                    <select id="chartExchange" onchange="switchChartExchange()" class="text-xs px-2 py-1 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        <option value="binance">Binance</option>
+                        <option value="okx">OKX</option>
+                        <option value="bybit">Bybit</option>
+                    </select>
+                    <div id="chartIntervalBtns" class="flex gap-1">
+                        <button onclick="switchChartInterval('1m')" class="chart-interval-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-sky-100">1m</button>
+                        <button onclick="switchChartInterval('5m')" class="chart-interval-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-sky-100">5m</button>
+                        <button onclick="switchChartInterval('15m')" class="chart-interval-btn text-xs px-2 py-1 rounded bg-sky-500 text-white">15m</button>
+                        <button onclick="switchChartInterval('1h')" class="chart-interval-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-sky-100">1h</button>
+                        <button onclick="switchChartInterval('4h')" class="chart-interval-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-sky-100">4h</button>
+                        <button onclick="switchChartInterval('1d')" class="chart-interval-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-sky-100">1d</button>
+                    </div>
+                </div>
+                <div id="chartStatus" class="text-xs text-slate-400">
+                    <span id="chartLiveIndicator" class="inline-block w-2 h-2 rounded-full bg-green-500 mr-1 animate-pulse"></span>
+                    实时
+                </div>
+            </div>
+            
+            <!-- K线图表 -->
+            <div class="bg-slate-50 rounded-xl p-2 mb-4 flex-1 min-h-[300px] relative">
+                <div id="tokenChart" class="w-full h-full min-h-[280px]"></div>
+                <div id="chartLoading" class="absolute inset-0 flex items-center justify-center bg-slate-50/80 hidden">
+                    <div class="text-slate-400 text-sm">加载中...</div>
+                </div>
+            </div>
+            
+            <!-- 多交易所行情 -->
+            <div class="mb-4">
+                <h4 class="text-sm font-semibold text-slate-600 mb-2">📊 各交易所实时行情</h4>
+                <div id="tokenExchangePrices" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-[120px] overflow-y-auto">
+                    <div class="text-center text-slate-400 py-4">加载中...</div>
+                </div>
+            </div>
+            
+            <!-- 代币信息 -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div class="bg-slate-50 rounded-lg p-3">
+                    <div class="text-xs text-slate-400 mb-1">合约地址</div>
+                    <div id="tokenContract" class="font-mono text-xs text-slate-600 truncate">--</div>
+                </div>
+                <div class="bg-slate-50 rounded-lg p-3">
+                    <div class="text-xs text-slate-400 mb-1">链</div>
+                    <div id="tokenChain" class="font-medium text-slate-700">--</div>
+                </div>
+                <div class="bg-slate-50 rounded-lg p-3">
+                    <div class="text-xs text-slate-400 mb-1">DEX 流动性</div>
+                    <div id="tokenLiquidity" class="font-medium text-slate-700">--</div>
+                </div>
+                <div class="bg-slate-50 rounded-lg p-3">
+                    <div class="text-xs text-slate-400 mb-1">上线交易所</div>
+                    <div id="tokenExchangeCount" class="font-medium text-slate-700">--</div>
+                </div>
+            </div>
+            
+            <!-- 操作按钮 -->
+            <div class="flex gap-3">
+                <button onclick="openDexScreener()" class="flex-1 btn-primary py-2.5 flex items-center justify-center gap-2">
+                    <i data-lucide="external-link" class="w-4 h-4"></i>
+                    DexScreener
+                </button>
+                <button onclick="copyTokenContract()" class="flex-1 btn-secondary py-2.5 flex items-center justify-center gap-2">
+                    <i data-lucide="copy" class="w-4 h-4"></i>
+                    复制合约
+                </button>
+                <button onclick="refreshTokenPrice()" class="btn-secondary py-2.5 px-4 flex items-center justify-center gap-2">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                </button>
             </div>
         </div>
     </div>
@@ -2448,8 +2738,8 @@ HTML = '''<!DOCTYPE html>
                 const data = await res.json();
                 currentPairsData = data.pairs || [];
                 
-                document.getElementById('pairsModalTitle').textContent = `${exchange.toUpperCase()} 已知交易对`;
-                document.getElementById('pairsModalSubtitle').textContent = `共 ${data.total || 0} 个交易对`;
+                document.getElementById('pairsModalTitle').textContent = `${exchange.toUpperCase()} 交易对`;
+                document.getElementById('pairsModalSubtitle').textContent = `共 ${data.total || 0} 个`;
                 
                 renderPairs(currentPairsData);
             } catch (e) {
@@ -2457,23 +2747,87 @@ HTML = '''<!DOCTYPE html>
             }
         }
         
-        // 查看所有代币（融合）
-        async function showAllTokens() {
+        // 代币分类定义
+        const TOKEN_CATEGORIES = {
+            major: ['BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'AVAX', 'DOT', 'LINK', 'MATIC', 'TRX', 'LTC', 'BCH', 'ATOM', 'UNI', 'ICP', 'FIL', 'ETC', 'APT', 'NEAR', 'STX', 'INJ', 'HBAR', 'VET', 'ALGO', 'FTM', 'EGLD', 'FLOW', 'XLM', 'XMR', 'EOS', 'AAVE', 'GRT', 'THETA', 'AXS', 'SAND', 'MANA', 'ENJ'],
+            meme: ['DOGE', 'SHIB', 'PEPE', 'FLOKI', 'BONK', 'WIF', 'BOME', 'MEME', 'BABYDOGE', 'ELON', 'KISHU', 'SAITAMA', 'VOLT', 'CAT', 'TURBO', 'LADYS', 'WOJAK', 'CHAD', 'BRETT', 'SLERF', 'MEW', 'POPCAT', 'MOG', 'SPX', 'NEIRO', 'GOAT', 'PNUT', 'ACT', 'FWOG', 'MOODENG'],
+            defi: ['UNI', 'AAVE', 'SUSHI', 'COMP', 'MKR', 'CRV', 'SNX', 'YFI', '1INCH', 'CAKE', 'DYDX', 'LDO', 'RPL', 'GMX', 'PENDLE', 'BLUR', 'JUP', 'RAY', 'ORCA', 'RDNT', 'EIGEN'],
+            layer2: ['ARB', 'OP', 'MATIC', 'IMX', 'LRC', 'STRK', 'ZK', 'MANTA', 'METIS', 'BOBA', 'SKL', 'CELR', 'MODE', 'SCROLL', 'BLAST', 'LINEA', 'ZKSYNC', 'BASE', 'TAIKO'],
+            ai: ['FET', 'RNDR', 'AGIX', 'OCEAN', 'TAO', 'ARKM', 'WLD', 'AIOZ', 'NMR', 'CTXC', 'VIRTUAL', 'AI16Z', 'ARC', 'GRASS', 'COOKIE', 'SWARMS', 'FARTCOIN', 'GRIFFAIN'],
+            gaming: ['AXS', 'SAND', 'MANA', 'GALA', 'ENJ', 'IMX', 'MAGIC', 'PRIME', 'PIXEL', 'PORTAL', 'RONIN', 'XAI', 'BEAM', 'SUPER', 'YGG', 'ILV', 'GODS'],
+            stable: ['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'USDP', 'USDD', 'FRAX', 'GUSD', 'LUSD', 'FDUSD', 'PYUSD', 'EURC', 'EURT']
+        };
+        
+        let allTokensData = [];
+        let currentCategory = 'all';
+        
+        // 根据类别筛选代币
+        async function filterByCategory(category) {
+            currentCategory = category;
+            
+            // 更新按钮样式
+            document.querySelectorAll('.cat-btn').forEach(btn => {
+                if (btn.dataset.cat === category) {
+                    btn.classList.add('font-bold', 'ring-2', 'ring-offset-1');
+                } else {
+                    btn.classList.remove('font-bold', 'ring-2', 'ring-offset-1');
+                }
+            });
+            
             document.getElementById('pairsModal').classList.remove('hidden');
+            document.getElementById('pairsModal').classList.add('flex');
             document.getElementById('pairsList').innerHTML = '<div class="text-center text-slate-400 py-8">加载中...</div>';
             
             try {
-                const res = await fetch('/api/tokens?limit=500');
-                const data = await res.json();
+                // 如果还没有加载数据，先加载
+                if (allTokensData.length === 0) {
+                    const res = await fetch('/api/tokens?limit=2000');
+                    const data = await res.json();
+                    allTokensData = data.tokens || [];
+                }
                 
-                document.getElementById('pairsModalTitle').textContent = '全部代币（融合视图）';
+                // 根据类别筛选
+                let filtered = allTokensData;
+                const catNames = {
+                    all: '🌐 全部代币',
+                    major: '⭐ 主流币',
+                    meme: '🐕 Meme 币',
+                    defi: '🏦 DeFi',
+                    layer2: '🔗 Layer2',
+                    ai: '🤖 AI/Gaming',
+                    new: '🚀 新币',
+                    stable: '💵 稳定币'
+                };
+                
+                if (category !== 'all') {
+                    if (category === 'new') {
+                        // 新币：发现时间在7天内
+                        const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+                        filtered = allTokensData.filter(t => t.first_seen && t.first_seen > weekAgo);
+                    } else if (category === 'ai') {
+                        // AI/Gaming 合并
+                        const aiList = [...TOKEN_CATEGORIES.ai, ...TOKEN_CATEGORIES.gaming];
+                        filtered = allTokensData.filter(t => aiList.includes(t.symbol.toUpperCase()));
+                    } else if (TOKEN_CATEGORIES[category]) {
+                        const catList = TOKEN_CATEGORIES[category];
+                        filtered = allTokensData.filter(t => catList.includes(t.symbol.toUpperCase()));
+                    }
+                }
+                
+                document.getElementById('pairsModalTitle').textContent = catNames[category] || '代币列表';
                 document.getElementById('pairsModalSubtitle').textContent = 
-                    `共 ${data.total} 个代币 | 多所上线: ${data.stats?.multi_exchange || 0} | 有合约: ${data.stats?.with_contract || 0}`;
+                    `共 ${filtered.length} 个代币`;
                 
-                renderTokens(data.tokens || []);
+                currentPairsData = filtered;
+                renderTokens(filtered);
             } catch (e) {
-                document.getElementById('pairsList').innerHTML = '<div class="text-center text-red-500 py-8">加载失败</div>';
+                document.getElementById('pairsList').innerHTML = '<div class="text-center text-red-500 py-8">加载失败: ' + e.message + '</div>';
             }
+        }
+        
+        // 查看所有代币（融合）
+        async function showAllTokens() {
+            await filterByCategory('all');
         }
         
         function filterPairs() {
@@ -2513,6 +2867,18 @@ HTML = '''<!DOCTYPE html>
             document.getElementById('pairsList').innerHTML = h;
         }
         
+        // 类别样式映射
+        const CAT_STYLES = {
+            major: { bg: 'bg-amber-100', text: 'text-amber-700', label: '主流' },
+            meme: { bg: 'bg-pink-100', text: 'text-pink-700', label: 'Meme' },
+            defi: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'DeFi' },
+            layer2: { bg: 'bg-violet-100', text: 'text-violet-700', label: 'L2' },
+            ai: { bg: 'bg-cyan-100', text: 'text-cyan-700', label: 'AI' },
+            gaming: { bg: 'bg-indigo-100', text: 'text-indigo-700', label: 'Game' },
+            stable: { bg: 'bg-slate-100', text: 'text-slate-600', label: '稳定' },
+            other: { bg: 'bg-gray-100', text: 'text-gray-600', label: '' },
+        };
+        
         function renderTokens(tokens) {
             if (!tokens.length) {
                 document.getElementById('pairsList').innerHTML = '<div class="text-center text-slate-400 py-8">暂无代币数据</div>';
@@ -2530,15 +2896,21 @@ HTML = '''<!DOCTYPE html>
                 const liquidity = t.liquidity_usd > 0 ? `$${(t.liquidity_usd/1000).toFixed(0)}k` : '-';
                 const contract = t.contract_address ? `<span class="text-green-600">✓</span>` : '';
                 
+                // 类别标签
+                const cat = t.category || 'other';
+                const catStyle = CAT_STYLES[cat] || CAT_STYLES.other;
+                const catBadge = catStyle.label ? `<span class="${catStyle.bg} ${catStyle.text} text-xs px-1.5 py-0.5 rounded">${catStyle.label}</span>` : '';
+                
                 h += `
                 <div class="bg-slate-50 hover:bg-sky-50 rounded-lg p-3 cursor-pointer transition-colors flex items-center justify-between" onclick="showTokenDetail('${t.symbol}')">
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2">
                         <div class="font-bold text-slate-800">${t.symbol}</div>
+                        ${catBadge}
                         ${tierBadge}
                         ${contract}
                     </div>
                     <div class="flex items-center gap-4 text-sm">
-                        <div class="text-slate-500">${t.exchange_count} 交易所</div>
+                        <div class="text-slate-500">${t.exchange_count} 所</div>
                         <div class="text-slate-400">${liquidity}</div>
                         <div class="text-xs text-slate-400">${t.exchanges.slice(0,3).join(', ')}${t.exchanges.length > 3 ? '...' : ''}</div>
                     </div>
@@ -2546,19 +2918,550 @@ HTML = '''<!DOCTYPE html>
             }
             h += '</div>';
             document.getElementById('pairsList').innerHTML = h;
+            lucide.createIcons();
         }
+        
+        // 当前代币数据
+        let currentTokenData = null;
         
         async function showTokenDetail(symbol) {
             closePairsModal();
-            // 查找合约地址
+            
+            // 显示弹窗
+            const modal = document.getElementById('tokenDetailModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            // 设置基本信息
+            document.getElementById('tokenSymbol').textContent = symbol;
+            document.getElementById('tokenIcon').textContent = symbol.charAt(0);
+            document.getElementById('tokenCategory').textContent = '加载中...';
+            document.getElementById('tokenPrice').textContent = '--';
+            document.getElementById('tokenChange').textContent = '--%';
+            document.getElementById('tokenExchangePrices').innerHTML = '<div class="text-center text-slate-400 py-4 col-span-4">加载行情...</div>';
+            
+            // 查找代币信息
             try {
                 const res = await fetch(`/api/cross-exchange/${symbol}`);
                 const data = await res.json();
+                currentTokenData = data;
+                
                 if (data.found) {
-                    alert(`${symbol} 详情:\\n\\n交易所: ${data.exchanges?.join(', ') || '-'}\\n合约: ${data.contract_address || '未知'}\\n链: ${data.chain || '未知'}\\n流动性: $${(data.liquidity_usd/1000).toFixed(0)}k`);
+                    // 类别
+                    const catNames = {major:'主流币', meme:'Meme币', defi:'DeFi', layer2:'Layer2', ai:'AI/Gaming', stable:'稳定币', other:'其他'};
+                    const cat = data.category || 'other';
+                    document.getElementById('tokenCategory').textContent = catNames[cat] || cat;
+                    
+                    // 合约信息
+                    document.getElementById('tokenContract').textContent = data.contract_address || '暂无';
+                    document.getElementById('tokenChain').textContent = data.chain || 'unknown';
+                    document.getElementById('tokenLiquidity').textContent = data.liquidity_usd > 0 ? `$${(data.liquidity_usd/1000).toFixed(0)}k` : '-';
+                    document.getElementById('tokenExchangeCount').textContent = `${data.exchange_count || data.exchanges?.length || 0} 所`;
+                    
+                    // 获取实时行情
+                    await loadTokenPrices(symbol, data.exchanges || []);
+                    
+                    // 加载图表
+                    loadTokenChart(symbol);
                 }
             } catch (e) {
-                console.error(e);
+                console.error('加载代币信息失败:', e);
+                document.getElementById('tokenCategory').textContent = '加载失败';
+            }
+            
+            lucide.createIcons();
+        }
+        
+        async function loadTokenPrices(symbol, exchanges) {
+            // 优先交易所列表
+            const priorityExchanges = ['binance', 'okx', 'bybit', 'upbit', 'gate', 'kucoin', 'bitget', 'mexc'];
+            const toFetch = exchanges.length > 0 ? exchanges : priorityExchanges;
+            
+            let pricesHtml = '';
+            let mainPrice = null;
+            let mainChange = null;
+            let high24h = null;
+            let low24h = null;
+            let volume24h = 0;
+            
+            // 并行获取各交易所行情
+            const fetchPromises = toFetch.slice(0, 6).map(async (ex) => {
+                try {
+                    // 根据交易所格式化交易对
+                    let pair = symbol + 'USDT';
+                    if (ex === 'okx') pair = symbol + '-USDT';
+                    else if (ex === 'gate') pair = symbol + '_USDT';
+                    else if (ex === 'upbit') pair = 'KRW-' + symbol;
+                    else if (ex === 'kucoin') pair = symbol + '-USDT';
+                    
+                    const res = await fetch(`/api/ticker/${ex}/${pair}`);
+                    if (!res.ok) return null;
+                    const data = await res.json();
+                    if (data.error) return null;
+                    
+                    return {exchange: ex, ...data};
+                } catch {
+                    return null;
+                }
+            });
+            
+            const results = await Promise.all(fetchPromises);
+            
+            results.forEach(data => {
+                if (!data) return;
+                
+                const price = parseFloat(data.price || 0);
+                const change = parseFloat(data.change_24h || 0);
+                const changeClass = change >= 0 ? 'text-green-600' : 'text-red-600';
+                const changeSign = change >= 0 ? '+' : '';
+                
+                // 设置主价格（第一个有效的）
+                if (mainPrice === null && price > 0) {
+                    mainPrice = price;
+                    mainChange = change;
+                    high24h = data.high_24h;
+                    low24h = data.low_24h;
+                }
+                
+                // 累计成交量
+                if (data.volume_24h) {
+                    volume24h += parseFloat(data.volume_24h);
+                }
+                
+                // 交易所行情卡片
+                pricesHtml += `
+                <div class="bg-white rounded-lg p-2.5 border border-slate-100 hover:border-sky-200 transition-colors">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-medium text-slate-500 uppercase">${data.exchange}</span>
+                        <span class="${changeClass} text-xs font-medium">${changeSign}${change.toFixed(2)}%</span>
+                    </div>
+                    <div class="font-bold text-slate-800">${formatPrice(price)}</div>
+                </div>`;
+            });
+            
+            // 更新主价格显示
+            if (mainPrice !== null) {
+                document.getElementById('tokenPrice').textContent = formatPrice(mainPrice);
+                const changeClass = mainChange >= 0 ? 'text-green-600' : 'text-red-600';
+                const changeSign = mainChange >= 0 ? '+' : '';
+                document.getElementById('tokenChange').innerHTML = `<span class="${changeClass}">${changeSign}${mainChange.toFixed(2)}%</span>`;
+                document.getElementById('tokenHigh').textContent = formatPrice(high24h);
+                document.getElementById('tokenLow').textContent = formatPrice(low24h);
+                document.getElementById('tokenVolume').textContent = formatVolume(volume24h);
+            }
+            
+            // 更新交易所行情列表
+            if (pricesHtml) {
+                document.getElementById('tokenExchangePrices').innerHTML = pricesHtml;
+            } else {
+                document.getElementById('tokenExchangePrices').innerHTML = '<div class="text-center text-slate-400 py-4 col-span-4">暂无行情数据</div>';
+            }
+        }
+        
+        function formatPrice(price) {
+            if (!price || price === 0) return '--';
+            price = parseFloat(price);
+            if (price >= 1000) return '$' + price.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            if (price >= 1) return '$' + price.toFixed(2);
+            if (price >= 0.0001) return '$' + price.toFixed(4);
+            return '$' + price.toFixed(8);
+        }
+        
+        function formatVolume(vol) {
+            if (!vol || vol === 0) return '--';
+            vol = parseFloat(vol);
+            if (vol >= 1e9) return '$' + (vol/1e9).toFixed(2) + 'B';
+            if (vol >= 1e6) return '$' + (vol/1e6).toFixed(2) + 'M';
+            if (vol >= 1e3) return '$' + (vol/1e3).toFixed(2) + 'K';
+            return '$' + vol.toFixed(2);
+        }
+        
+        // ==================== 图表相关变量 ====================
+        let chart = null;
+        let candleSeries = null;
+        let volumeSeries = null;
+        let chartWebSocket = null;
+        let currentChartSymbol = '';
+        let currentChartInterval = '15m';
+        let currentChartExchange = 'binance';
+        
+        function loadTokenChart(symbol) {
+            currentChartSymbol = symbol;
+            const container = document.getElementById('tokenChart');
+            container.innerHTML = '';
+            
+            // 显示加载中
+            document.getElementById('chartLoading').classList.remove('hidden');
+            
+            // 销毁旧的 WebSocket
+            if (chartWebSocket) {
+                chartWebSocket.close();
+                chartWebSocket = null;
+            }
+            
+            // 销毁旧图表
+            if (chart) {
+                chart.remove();
+                chart = null;
+            }
+            
+            // 创建新图表
+            chart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: 280,
+                layout: {
+                    background: { type: 'solid', color: '#f8fafc' },
+                    textColor: '#64748b',
+                },
+                grid: {
+                    vertLines: { color: '#e2e8f0' },
+                    horzLines: { color: '#e2e8f0' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: '#e2e8f0',
+                },
+                timeScale: {
+                    borderColor: '#e2e8f0',
+                    timeVisible: true,
+                    secondsVisible: false,
+                },
+            });
+            
+            // 创建 K 线系列
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#22c55e',
+                downColor: '#ef4444',
+                borderDownColor: '#ef4444',
+                borderUpColor: '#22c55e',
+                wickDownColor: '#ef4444',
+                wickUpColor: '#22c55e',
+            });
+            
+            // 创建成交量系列
+            volumeSeries = chart.addHistogramSeries({
+                color: '#93c5fd',
+                priceFormat: { type: 'volume' },
+                priceScaleId: '',
+                scaleMargins: { top: 0.8, bottom: 0 },
+            });
+            
+            // 加载历史数据
+            loadHistoricalKlines(symbol, currentChartInterval, currentChartExchange);
+            
+            // 响应式调整
+            const resizeObserver = new ResizeObserver(entries => {
+                if (chart && entries[0]) {
+                    chart.applyOptions({ width: entries[0].contentRect.width });
+                }
+            });
+            resizeObserver.observe(container);
+        }
+        
+        async function loadHistoricalKlines(symbol, interval, exchange) {
+            try {
+                // 根据交易所选择 API
+                let url, formatFn;
+                
+                if (exchange === 'binance') {
+                    url = `https://api.binance.com/api/v3/klines?symbol=${symbol}USDT&interval=${interval}&limit=500`;
+                    formatFn = formatBinanceKlines;
+                } else if (exchange === 'okx') {
+                    const okxInterval = interval === '1d' ? '1D' : interval;
+                    url = `https://www.okx.com/api/v5/market/candles?instId=${symbol}-USDT&bar=${okxInterval}&limit=300`;
+                    formatFn = formatOKXKlines;
+                } else if (exchange === 'bybit') {
+                    const bybitInterval = { '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240', '1d': 'D' }[interval] || '15';
+                    url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${symbol}USDT&interval=${bybitInterval}&limit=500`;
+                    formatFn = formatBybitKlines;
+                }
+                
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                const { candles, volumes } = formatFn(data);
+                
+                if (candleSeries && candles.length > 0) {
+                    candleSeries.setData(candles);
+                    volumeSeries.setData(volumes);
+                    chart.timeScale().fitContent();
+                }
+                
+                // 隐藏加载中
+                document.getElementById('chartLoading').classList.add('hidden');
+                
+                // 连接 WebSocket
+                connectChartWebSocket(symbol, interval, exchange);
+                
+            } catch (e) {
+                console.error('加载 K 线失败:', e);
+                document.getElementById('chartLoading').innerHTML = '<div class="text-red-500 text-sm">加载失败</div>';
+            }
+        }
+        
+        function formatBinanceKlines(data) {
+            const candles = [];
+            const volumes = [];
+            
+            for (const k of data) {
+                const time = Math.floor(k[0] / 1000);
+                const open = parseFloat(k[1]);
+                const high = parseFloat(k[2]);
+                const low = parseFloat(k[3]);
+                const close = parseFloat(k[4]);
+                const volume = parseFloat(k[5]);
+                
+                candles.push({ time, open, high, low, close });
+                volumes.push({ 
+                    time, 
+                    value: volume,
+                    color: close >= open ? '#86efac' : '#fca5a5'
+                });
+            }
+            
+            return { candles, volumes };
+        }
+        
+        function formatOKXKlines(data) {
+            const candles = [];
+            const volumes = [];
+            
+            // OKX 返回倒序，需要反转
+            const klines = (data.data || []).reverse();
+            
+            for (const k of klines) {
+                const time = Math.floor(parseInt(k[0]) / 1000);
+                const open = parseFloat(k[1]);
+                const high = parseFloat(k[2]);
+                const low = parseFloat(k[3]);
+                const close = parseFloat(k[4]);
+                const volume = parseFloat(k[5]);
+                
+                candles.push({ time, open, high, low, close });
+                volumes.push({ 
+                    time, 
+                    value: volume,
+                    color: close >= open ? '#86efac' : '#fca5a5'
+                });
+            }
+            
+            return { candles, volumes };
+        }
+        
+        function formatBybitKlines(data) {
+            const candles = [];
+            const volumes = [];
+            
+            // Bybit 返回倒序
+            const klines = (data.result?.list || []).reverse();
+            
+            for (const k of klines) {
+                const time = Math.floor(parseInt(k[0]) / 1000);
+                const open = parseFloat(k[1]);
+                const high = parseFloat(k[2]);
+                const low = parseFloat(k[3]);
+                const close = parseFloat(k[4]);
+                const volume = parseFloat(k[5]);
+                
+                candles.push({ time, open, high, low, close });
+                volumes.push({ 
+                    time, 
+                    value: volume,
+                    color: close >= open ? '#86efac' : '#fca5a5'
+                });
+            }
+            
+            return { candles, volumes };
+        }
+        
+        function connectChartWebSocket(symbol, interval, exchange) {
+            // 断开旧连接
+            if (chartWebSocket) {
+                chartWebSocket.close();
+            }
+            
+            let wsUrl;
+            
+            if (exchange === 'binance') {
+                wsUrl = `wss://stream.binance.com:9443/ws/${symbol.toLowerCase()}usdt@kline_${interval}`;
+            } else if (exchange === 'okx') {
+                // OKX WebSocket 需要订阅
+                wsUrl = 'wss://ws.okx.com:8443/ws/v5/public';
+            } else if (exchange === 'bybit') {
+                const bybitInterval = { '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240', '1d': 'D' }[interval] || '15';
+                wsUrl = `wss://stream.bybit.com/v5/public/spot`;
+            }
+            
+            try {
+                chartWebSocket = new WebSocket(wsUrl);
+                
+                chartWebSocket.onopen = () => {
+                    console.log('Chart WebSocket connected:', exchange);
+                    document.getElementById('chartLiveIndicator').classList.remove('bg-yellow-500');
+                    document.getElementById('chartLiveIndicator').classList.add('bg-green-500');
+                    
+                    // OKX/Bybit 需要发送订阅消息
+                    if (exchange === 'okx') {
+                        const okxInterval = interval === '1d' ? '1D' : interval;
+                        chartWebSocket.send(JSON.stringify({
+                            op: 'subscribe',
+                            args: [{ channel: `candle${okxInterval}`, instId: `${symbol}-USDT` }]
+                        }));
+                    } else if (exchange === 'bybit') {
+                        const bybitInterval = { '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240', '1d': 'D' }[interval] || '15';
+                        chartWebSocket.send(JSON.stringify({
+                            op: 'subscribe',
+                            args: [`kline.${bybitInterval}.${symbol}USDT`]
+                        }));
+                    }
+                };
+                
+                chartWebSocket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        let candle = null;
+                        
+                        if (exchange === 'binance' && data.k) {
+                            const k = data.k;
+                            candle = {
+                                time: Math.floor(k.t / 1000),
+                                open: parseFloat(k.o),
+                                high: parseFloat(k.h),
+                                low: parseFloat(k.l),
+                                close: parseFloat(k.c),
+                                volume: parseFloat(k.v),
+                            };
+                        } else if (exchange === 'okx' && data.data) {
+                            const k = data.data[0];
+                            candle = {
+                                time: Math.floor(parseInt(k[0]) / 1000),
+                                open: parseFloat(k[1]),
+                                high: parseFloat(k[2]),
+                                low: parseFloat(k[3]),
+                                close: parseFloat(k[4]),
+                                volume: parseFloat(k[5]),
+                            };
+                        } else if (exchange === 'bybit' && data.data) {
+                            const k = data.data[0];
+                            candle = {
+                                time: Math.floor(parseInt(k.start) / 1000),
+                                open: parseFloat(k.open),
+                                high: parseFloat(k.high),
+                                low: parseFloat(k.low),
+                                close: parseFloat(k.close),
+                                volume: parseFloat(k.volume),
+                            };
+                        }
+                        
+                        if (candle && candleSeries) {
+                            candleSeries.update(candle);
+                            volumeSeries.update({
+                                time: candle.time,
+                                value: candle.volume,
+                                color: candle.close >= candle.open ? '#86efac' : '#fca5a5'
+                            });
+                        }
+                    } catch (e) {
+                        // 忽略解析错误
+                    }
+                };
+                
+                chartWebSocket.onclose = () => {
+                    console.log('Chart WebSocket closed');
+                    document.getElementById('chartLiveIndicator').classList.remove('bg-green-500');
+                    document.getElementById('chartLiveIndicator').classList.add('bg-yellow-500');
+                    
+                    // 3秒后自动重连
+                    if (currentChartSymbol) {
+                        setTimeout(() => {
+                            if (currentChartSymbol) {
+                                connectChartWebSocket(currentChartSymbol, currentChartInterval, currentChartExchange);
+                            }
+                        }, 3000);
+                    }
+                };
+                
+                chartWebSocket.onerror = (err) => {
+                    console.error('Chart WebSocket error:', err);
+                };
+                
+            } catch (e) {
+                console.error('WebSocket 连接失败:', e);
+            }
+        }
+        
+        function switchChartInterval(interval) {
+            currentChartInterval = interval;
+            
+            // 更新按钮样式
+            document.querySelectorAll('.chart-interval-btn').forEach(btn => {
+                btn.classList.remove('bg-sky-500', 'text-white');
+                btn.classList.add('bg-slate-100');
+            });
+            event.target.classList.remove('bg-slate-100');
+            event.target.classList.add('bg-sky-500', 'text-white');
+            
+            // 重新加载图表
+            if (currentChartSymbol) {
+                document.getElementById('chartLoading').classList.remove('hidden');
+                loadHistoricalKlines(currentChartSymbol, interval, currentChartExchange);
+            }
+        }
+        
+        function switchChartExchange() {
+            currentChartExchange = document.getElementById('chartExchange').value;
+            
+            // 重新加载图表
+            if (currentChartSymbol) {
+                document.getElementById('chartLoading').classList.remove('hidden');
+                loadHistoricalKlines(currentChartSymbol, currentChartInterval, currentChartExchange);
+            }
+        }
+        
+        function closeTokenDetail() {
+            document.getElementById('tokenDetailModal').classList.add('hidden');
+            document.getElementById('tokenDetailModal').classList.remove('flex');
+            
+            // 关闭 WebSocket
+            if (chartWebSocket) {
+                chartWebSocket.close();
+                chartWebSocket = null;
+            }
+            
+            // 销毁图表
+            if (chart) {
+                chart.remove();
+                chart = null;
+            }
+            
+            currentChartSymbol = '';
+        }
+        
+        function openDexScreener() {
+            if (currentTokenData?.contract_address) {
+                window.open(`https://dexscreener.com/search?q=${currentTokenData.contract_address}`, '_blank');
+            } else {
+                const symbol = document.getElementById('tokenSymbol').textContent;
+                window.open(`https://dexscreener.com/search?q=${symbol}`, '_blank');
+            }
+        }
+        
+        function copyTokenContract() {
+            const contract = currentTokenData?.contract_address;
+            if (contract) {
+                navigator.clipboard.writeText(contract);
+                alert('合约地址已复制');
+            } else {
+                alert('暂无合约地址');
+            }
+        }
+        
+        async function refreshTokenPrice() {
+            const symbol = document.getElementById('tokenSymbol').textContent;
+            if (symbol && symbol !== 'TOKEN') {
+                await loadTokenPrices(symbol, currentTokenData?.exchanges || []);
             }
         }
         
