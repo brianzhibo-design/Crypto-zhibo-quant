@@ -811,10 +811,7 @@ def get_whale_dynamics():
         import traceback
         traceback.print_exc()
     
-    # 如果没有真实数据，返回模拟数据用于 UI 展示
-    if not events:
-        events = _get_mock_whale_events()
-    
+    # 如果没有真实数据，返回空列表（前端应优雅处理空状态）
     return jsonify(events)
 
 
@@ -939,7 +936,7 @@ def get_smart_money_stats():
             'total_sell_usd': total_sell,
             'net_flow_usd': total_buy - total_sell,
             'active_addresses': len(active_addresses),
-            'top_tokens': top_tokens if top_tokens else _get_mock_top_tokens(),
+            'top_tokens': top_tokens if top_tokens else [],  # 无数据时返回空列表
             'category_stats': category_stats,
         }
         
@@ -960,7 +957,8 @@ def get_smart_money_stats():
             'total_sell_usd': 0,
             'net_flow_usd': 0,
             'active_addresses': 0,
-            'top_tokens': _get_mock_top_tokens(),
+            'top_tokens': [],  # 无数据时返回空列表
+            'message': '暂无数据',
         })
 
 
@@ -1423,80 +1421,6 @@ def get_whale_leaderboard():
     except Exception as e:
         logger.error(f"获取排行榜失败: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
-
-
-def _get_mock_whale_events():
-    """返回模拟巨鲸事件（仅用于UI测试）"""
-    return [
-        {
-            'id': '1',
-            'timestamp': now_ms() - 120000,
-            'source': 'lookonchain',
-            'address': '0x020cA66C30beC2c4Fe3861a94E4DB4A498A35872',
-            'address_label': 'smart_money',
-            'address_label_cn': '聪明钱',
-            'address_name': 'Machi Big Brother',
-            'action': 'buy',
-            'token_symbol': 'PEPE',
-            'amount_usd': 2500000,
-            'amount_token': 1500000000000,
-            'exchange_or_dex': 'Uniswap',
-            'tx_hash': '0x1234...5678',
-            'chain': 'ethereum',
-            'description': '🐋 Machi Big Brother 在 Uniswap 买入 $2.5M PEPE',
-            'related_listing': '',
-            'priority': 5,
-        },
-        {
-            'id': '2',
-            'timestamp': now_ms() - 300000,
-            'source': 'whale_alert',
-            'address': '0x28C6c06298d514Db089934071355E5743bf21d60',
-            'address_label': 'exchange',
-            'address_label_cn': '交易所钱包',
-            'address_name': 'Binance Hot Wallet',
-            'action': 'deposit_to_cex',
-            'token_symbol': 'ETH',
-            'amount_usd': 15000000,
-            'amount_token': 4500,
-            'exchange_or_dex': 'Binance',
-            'tx_hash': '0xabcd...efgh',
-            'chain': 'ethereum',
-            'description': '⚠️ 4,500 ETH ($15M) 转入 Binance 热钱包',
-            'related_listing': '',
-            'priority': 4,
-        },
-        {
-            'id': '3',
-            'timestamp': now_ms() - 600000,
-            'source': 'spotonchain',
-            'address': '0x3DdfA8eC3052539b6C9549F12cEA2C295cfF5296',
-            'address_label': 'whale',
-            'address_label_cn': '巨鲸',
-            'address_name': 'Justin Sun',
-            'action': 'sell',
-            'token_symbol': 'TRX',
-            'amount_usd': 8000000,
-            'amount_token': 50000000,
-            'exchange_or_dex': 'Binance',
-            'tx_hash': '0x9876...5432',
-            'chain': 'tron',
-            'description': '📉 Justin Sun 卖出 5000万 TRX ($8M)',
-            'related_listing': '',
-            'priority': 4,
-        },
-    ]
-
-
-def _get_mock_top_tokens():
-    """返回模拟 Top 代币（仅用于UI测试）"""
-    return [
-        {'symbol': 'PEPE', 'net_buy_usd': 5200000, 'buy_address_count': 8, 'price_change_24h': 12.5},
-        {'symbol': 'WIF', 'net_buy_usd': 3800000, 'buy_address_count': 5, 'price_change_24h': 8.2},
-        {'symbol': 'BONK', 'net_buy_usd': 2100000, 'buy_address_count': 4, 'price_change_24h': -3.1},
-        {'symbol': 'ARB', 'net_buy_usd': 1500000, 'buy_address_count': 3, 'price_change_24h': 5.7},
-        {'symbol': 'OP', 'net_buy_usd': 900000, 'buy_address_count': 2, 'price_change_24h': 2.3},
-    ]
 
 
 # ==================== 流动性监控 API ====================

@@ -211,14 +211,15 @@ class DerivativesCollector:
         for symbol in self.SYMBOLS:
             data = await self._request(url, {'symbol': f"{symbol}USDT"})
             if data:
-                # 获取当前价格估算 USD 价值
+                # 获取当前价格计算 USD 价值
                 oi = float(data.get('openInterest', 0))
+                price = await self._get_price(symbol)  # 从 API 获取实时价格
                 
                 results.append(OpenInterestData(
                     symbol=symbol,
                     exchange='binance',
                     open_interest=oi,
-                    open_interest_usd=oi * self._estimate_price(symbol),
+                    open_interest_usd=oi * price if price > 0 else 0,
                 ))
             await asyncio.sleep(0.1)
         
@@ -241,17 +242,19 @@ class DerivativesCollector:
             'by_symbol': by_symbol,
         }
     
-    def _estimate_price(self, symbol: str) -> float:
-        """估算价格 (用于计算 OI USD 价值)"""
-        # 硬编码估算值，实际应该从价格服务获取
-        prices = {
-            'BTC': 95000,
-            'ETH': 3400,
-            'SOL': 190,
-            'XRP': 2.2,
-            'DOGE': 0.32,
-        }
-        return prices.get(symbol, 1)
+    async def _get_price(self, symbol: str) -> float:
+        """从 Binance API 获取实时价格"""
+        try:
+            url = f"{self.BINANCE_FUTURES_URL}/fapi/v1/ticker/price"
+            params = {'symbol': f'{symbol}USDT'}
+            data = await self._request(url, params)
+            if data and 'price' in data:
+                return float(data['price'])
+        except Exception as e:
+            logger.warning(f"获取 {symbol} 价格失败: {e}")
+        
+        # API 失败时返回 0，调用方应处理此情况
+        return 0
     
     # ==================== 清算数据 ====================
     

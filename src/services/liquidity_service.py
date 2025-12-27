@@ -31,7 +31,7 @@ class LiquidityService:
     def get_latest_snapshot(self) -> Dict:
         """获取最新的流动性快照"""
         if not self.redis:
-            return self._get_mock_snapshot()
+            return self._get_empty_snapshot()
         
         try:
             # 从 Redis 获取
@@ -39,33 +39,33 @@ class LiquidityService:
             if data:
                 return json.loads(data)
             
-            # 如果没有数据，返回 mock
-            return self._get_mock_snapshot()
+            # 如果没有数据，返回空数据（前端应优雅处理）
+            return self._get_empty_snapshot()
         except Exception as e:
             logger.error(f"获取流动性快照失败: {e}")
-            return self._get_mock_snapshot()
+            return self._get_empty_snapshot()
     
     def get_metrics(self) -> Dict:
         """获取关键流动性指标"""
         if not self.redis:
-            return self._get_mock_metrics()
+            return self._get_empty_metrics()
         
         try:
             data = self.redis.hgetall('liquidity:metrics')
             if data:
                 return {
-                    'liquidity_index': float(data.get('index', 50)),
-                    'liquidity_level': data.get('level', 'normal'),
-                    'risk_level': data.get('risk', 'medium'),
-                    'fear_greed': int(data.get('fear_greed', 50)),
+                    'liquidity_index': float(data.get('index', 0)),
+                    'liquidity_level': data.get('level', 'unknown'),
+                    'risk_level': data.get('risk', 'unknown'),
+                    'fear_greed': int(data.get('fear_greed', 0)),
                     'tvl': float(data.get('tvl', 0)),
                     'stablecoins': float(data.get('stablecoins', 0)),
                     'updated_at': data.get('updated_at', ''),
                 }
-            return self._get_mock_metrics()
+            return self._get_empty_metrics()
         except Exception as e:
             logger.error(f"获取流动性指标失败: {e}")
-            return self._get_mock_metrics()
+            return self._get_empty_metrics()
     
     def get_alerts(self, limit: int = 20) -> List[Dict]:
         """获取最近的流动性预警"""
@@ -81,22 +81,18 @@ class LiquidityService:
     
     def get_history(self, days: int = 30) -> List[Dict]:
         """获取历史流动性指数"""
-        # 从 Redis 时序数据或数据库获取
-        # 这里先返回模拟数据
-        history = []
-        now = datetime.now()
+        if not self.redis:
+            return []  # 无数据时返回空列表
         
-        for i in range(days, -1, -1):
-            date = now - timedelta(days=i)
-            # 模拟波动
-            base = 55 + (i % 7) * 3 - (i % 5) * 2
-            history.append({
-                'date': date.strftime('%Y-%m-%d'),
-                'liquidity_index': min(100, max(20, base)),
-                'fear_greed': 50 + (i % 10) - 5,
-            })
-        
-        return history
+        try:
+            # 从 Redis 时序数据获取
+            history_data = self.redis.lrange('liquidity:history', 0, days - 1)
+            if history_data:
+                return [json.loads(h) for h in history_data]
+            return []  # 无数据时返回空列表
+        except Exception as e:
+            logger.error(f"获取历史数据失败: {e}")
+            return []
     
     async def refresh_data(self) -> Dict:
         """手动刷新数据"""
@@ -108,49 +104,51 @@ class LiquidityService:
             logger.error(f"刷新数据失败: {e}")
             return {'error': str(e)}
     
-    def _get_mock_snapshot(self) -> Dict:
-        """返回模拟快照数据"""
+    def _get_empty_snapshot(self) -> Dict:
+        """返回空快照数据（表示暂无数据）"""
         return {
-            'snapshot_date': datetime.now().strftime('%Y-%m-%d'),
-            'snapshot_time': datetime.now().isoformat(),
-            'stablecoin_total_supply': 152_000_000_000,
-            'usdt_supply': 83_000_000_000,
-            'usdc_supply': 42_000_000_000,
-            'dai_supply': 5_000_000_000,
-            'defi_tvl_total': 89_500_000_000,
-            'defi_tvl_ethereum': 52_000_000_000,
-            'defi_tvl_bsc': 8_000_000_000,
-            'defi_tvl_solana': 5_000_000_000,
-            'defi_tvl_arbitrum': 4_000_000_000,
-            'defi_tvl_base': 3_500_000_000,
-            'dex_volume_24h': 5_200_000_000,
-            'btc_depth_2pct': 285_000_000,
-            'eth_depth_2pct': 152_000_000,
-            'avg_spread_bps': 1.2,
-            'futures_oi_total': 48_500_000_000,
-            'btc_funding_rate': 0.012,
-            'eth_funding_rate': 0.008,
-            'avg_funding_rate': 0.010,
-            'fear_greed_index': 45,
-            'fear_greed_classification': 'fear',
-            'total_market_cap': 3_200_000_000_000,
-            'btc_dominance': 57.2,
-            'eth_dominance': 12.8,
-            'liquidity_index': 62.5,
-            'liquidity_level': 'normal',
-            'risk_level': 'medium',
+            'snapshot_date': None,
+            'snapshot_time': None,
+            'stablecoin_total_supply': None,
+            'usdt_supply': None,
+            'usdc_supply': None,
+            'dai_supply': None,
+            'defi_tvl_total': None,
+            'defi_tvl_ethereum': None,
+            'defi_tvl_bsc': None,
+            'defi_tvl_solana': None,
+            'defi_tvl_arbitrum': None,
+            'defi_tvl_base': None,
+            'dex_volume_24h': None,
+            'btc_depth_2pct': None,
+            'eth_depth_2pct': None,
+            'avg_spread_bps': None,
+            'futures_oi_total': None,
+            'btc_funding_rate': None,
+            'eth_funding_rate': None,
+            'avg_funding_rate': None,
+            'fear_greed_index': None,
+            'fear_greed_classification': None,
+            'total_market_cap': None,
+            'btc_dominance': None,
+            'eth_dominance': None,
+            'liquidity_index': None,
+            'liquidity_level': 'unknown',
+            'risk_level': 'unknown',
+            'message': '暂无数据 - 请等待数据采集完成',
         }
     
-    def _get_mock_metrics(self) -> Dict:
-        """返回模拟指标"""
+    def _get_empty_metrics(self) -> Dict:
+        """返回空指标（表示暂无数据）"""
         return {
-            'liquidity_index': 62.5,
-            'liquidity_level': 'normal',
-            'risk_level': 'medium',
-            'fear_greed': 45,
-            'tvl': 89_500_000_000,
-            'stablecoins': 152_000_000_000,
-            'updated_at': datetime.now().isoformat(),
+            'liquidity_index': None,
+            'liquidity_level': 'unknown',
+            'risk_level': 'unknown',
+            'fear_greed': None,
+            'tvl': None,
+            'stablecoins': None,
+            'updated_at': None,
+            'message': '暂无数据',
         }
 
 
@@ -164,4 +162,3 @@ def get_liquidity_service(redis_client=None) -> LiquidityService:
     if _liquidity_service is None:
         _liquidity_service = LiquidityService(redis_client)
     return _liquidity_service
-
