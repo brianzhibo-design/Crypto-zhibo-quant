@@ -6470,17 +6470,25 @@ HTML = '''<!DOCTYPE html>
                 // 根据交易所选择 API
                 let url, formatFn;
                 
-                if (exchange === 'binance') {
+                // 对于不支持 K线 API 的交易所，使用 Binance 作为数据源
+                const klineExchange = ['binance', 'okx', 'bybit', 'gate'].includes(exchange) ? exchange : 'binance';
+                
+                if (klineExchange === 'binance') {
                     url = `https://api.binance.com/api/v3/klines?symbol=${symbol}USDT&interval=${interval}&limit=500`;
                     formatFn = formatBinanceKlines;
-                } else if (exchange === 'okx') {
+                } else if (klineExchange === 'okx') {
                     const okxInterval = interval === '1d' ? '1D' : interval;
                     url = `https://www.okx.com/api/v5/market/candles?instId=${symbol}-USDT&bar=${okxInterval}&limit=300`;
                     formatFn = formatOKXKlines;
-                } else if (exchange === 'bybit') {
+                } else if (klineExchange === 'bybit') {
                     const bybitInterval = { '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240', '1d': 'D' }[interval] || '15';
                     url = `https://api.bybit.com/v5/market/kline?category=spot&symbol=${symbol}USDT&interval=${bybitInterval}&limit=500`;
                     formatFn = formatBybitKlines;
+                } else if (klineExchange === 'gate') {
+                    // Gate.io K线 API
+                    const gateInterval = { '1m': '1m', '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1d': '1d' }[interval] || '15m';
+                    url = `https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${symbol}_USDT&interval=${gateInterval}&limit=500`;
+                    formatFn = formatGateKlines;
                 }
                 
                 const res = await fetch(url);
@@ -6655,6 +6663,31 @@ HTML = '''<!DOCTYPE html>
                 const low = parseFloat(k[3]);
                 const close = parseFloat(k[4]);
                 const volume = parseFloat(k[5]);
+                
+                candles.push({ time, open, high, low, close });
+                volumes.push({ 
+                    time, 
+                    value: volume,
+                    color: close >= open ? '#86efac' : '#fca5a5'
+                });
+            }
+            
+            return { candles, volumes };
+        }
+        
+        function formatGateKlines(data) {
+            const candles = [];
+            const volumes = [];
+            
+            // Gate.io 格式: [[timestamp, volume, close, high, low, open], ...]
+            // 数据已按时间正序排列
+            for (const k of data || []) {
+                const time = parseInt(k[0]);
+                const volume = parseFloat(k[1]);
+                const close = parseFloat(k[2]);
+                const high = parseFloat(k[3]);
+                const low = parseFloat(k[4]);
+                const open = parseFloat(k[5]);
                 
                 candles.push({ time, open, high, low, close });
                 volumes.push({ 
