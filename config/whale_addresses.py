@@ -19,6 +19,30 @@ ADDRESS_LABELS_CN = {
     "unknown": "未知",
 }
 
+# 监控配置
+WHALE_MONITOR_CONFIG = {
+    'thresholds': {
+        'large_transfer': 100000,      # 大额转账阈值 (USD)
+        'whale_balance': 1000000,      # 巨鲸余额阈值 (USD)
+        'smart_money_min': 50000,      # 聪明钱最小交易额 (USD)
+    },
+    'poll_intervals': {
+        'priority_1': 30,              # 最高优先级轮询间隔 (秒)
+        'priority_2': 60,
+        'priority_3': 120,
+        'default': 300,
+    },
+}
+
+# 信号优先级配置
+SIGNAL_PRIORITY = {
+    'smart_money_buy': 5,              # 聪明钱买入
+    'whale_accumulation': 4,           # 巨鲸积累
+    'exchange_withdrawal': 3,          # 从交易所提币
+    'exchange_deposit': 2,             # 转入交易所
+    'regular_transfer': 1,             # 普通转账
+}
+
 # 已知巨鲸地址库
 # 格式: address -> { label, name, chain, priority, tags, notes }
 WHALE_ADDRESSES = {
@@ -253,3 +277,18 @@ def get_high_priority_addresses(min_priority: int = 4) -> list:
         for addr, info in WHALE_ADDRESSES.items()
         if info.get("priority", 1) >= min_priority
     ]
+
+
+def get_whale_by_address(address: str) -> dict:
+    """根据地址获取巨鲸信息 (兼容 whale_monitor.py)"""
+    if not address:
+        return None
+    return get_address_info(address) if is_known_whale(address) else None
+
+
+def is_exchange_address(address: str) -> bool:
+    """检查是否是交易所地址"""
+    if not address:
+        return False
+    info = get_address_info(address)
+    return info.get("label") == "exchange"

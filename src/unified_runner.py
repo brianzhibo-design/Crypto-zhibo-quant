@@ -51,6 +51,7 @@ ENABLED_MODULES = {
     'fusion': True,             # 融合引擎
     'signal_router': False,     # 信号路由（按需）
     'pusher': True,             # 推送服务
+    'whale': True,              # 巨鲸/聪明钱监控
 }
 
 
@@ -207,6 +208,26 @@ class UnifiedRunner:
             self.stats['errors'] += 1
     
     # ============================================================
+    # 巨鲸/聪明钱监控
+    # ============================================================
+    
+    async def run_whale(self):
+        """巨鲸/聪明钱监控"""
+        if not ENABLED_MODULES.get('whale'):
+            return
+        
+        try:
+            from collectors.whale_monitor import WhaleMonitor
+            logger.info("[START] 🐋 Whale Monitor")
+            monitor = WhaleMonitor(redis_client=self.redis)
+            await monitor.start()
+        except ImportError as e:
+            logger.warning(f"Whale Monitor 导入失败: {e}")
+        except Exception as e:
+            logger.error(f"Whale Monitor 错误: {e}")
+            self.stats['errors'] += 1
+    
+    # ============================================================
     # 融合引擎
     # ============================================================
     
@@ -281,6 +302,7 @@ class UnifiedRunner:
             'blockchain': 'blockchain',
             'telegram': 'telegram',
             'news': 'news',
+            'whale': 'whale',
             'fusion': 'fusion',
             'pusher': 'pusher',
         }
@@ -322,6 +344,7 @@ class UnifiedRunner:
             'telegram': asyncio.create_task(self.run_telegram()),
             'news': asyncio.create_task(self.run_news()),
             'announcement': asyncio.create_task(self.run_announcement()),  # 公告API监控
+            'whale': asyncio.create_task(self.run_whale()),  # 巨鲸监控
             'fusion': asyncio.create_task(self.run_fusion()),
             'pusher': asyncio.create_task(self.run_pusher()),
             'memory': asyncio.create_task(self.memory_monitor()),

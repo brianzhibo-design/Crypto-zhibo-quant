@@ -737,7 +737,9 @@ def get_whale_dynamics():
                 
     except Exception as e:
         logger.error(f"获取巨鲸动态失败: {e}")
-        # 返回模拟数据用于测试
+    
+    # 如果没有真实数据，返回模拟数据用于 UI 展示
+    if not events:
         events = _get_mock_whale_events()
     
     return jsonify(events)

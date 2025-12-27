@@ -217,8 +217,22 @@ class WhaleMonitor:
             return
             
         try:
-            # 添加到巨鲸事件流
-            self.redis.xadd('events:whale', event, maxlen=1000)
+            # 添加到巨鲸事件流 (使用正确的 stream 名称)
+            # 转换事件格式
+            stream_data = {
+                'timestamp': str(event.get('ts', int(time.time() * 1000))),
+                'address': event.get('address', ''),
+                'address_label': event.get('address_name', '未知'),
+                'action': event.get('action', 'transfer'),
+                'token': event.get('token', 'ETH'),
+                'amount': str(event.get('amount', '0')),
+                'value_usd': str(event.get('value_usd', '$0')),
+                'exchange': '',
+                'tx_hash': event.get('tx_hash', ''),
+                'chain': event.get('chain', 'ethereum'),
+                'priority': '3',
+            }
+            self.redis.xadd('whales:dynamics', stream_data, maxlen=1000)
         except Exception as e:
             logger.error(f"推送事件失败: {e}")
             
