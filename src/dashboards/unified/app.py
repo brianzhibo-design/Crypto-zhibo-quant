@@ -731,11 +731,75 @@ def execute_trade():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/contracts')
+def list_contracts():
+    """列出所有已存储的合约地址"""
+    r = get_redis()
+    if not r:
+        return jsonify({'error': 'Redis 未连接'}), 500
+    
+    try:
+        # 扫描所有 contracts:* 键
+        contracts = []
+        cursor = 0
+        while True:
+            cursor, keys = r.scan(cursor, match='contracts:*', count=100)
+            for key in keys:
+                data = r.hgetall(key)
+                if data and data.get('contract_address'):
+                    contracts.append(data)
+            if cursor == 0:
+                break
+        
+        # 按流动性排序
+        contracts.sort(key=lambda x: float(x.get('liquidity_usd', 0) or 0), reverse=True)
+        
+        return jsonify({
+            'total': len(contracts),
+            'contracts': contracts
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/contract/<symbol>')
+def get_contract(symbol):
+    """获取单个代币的合约地址"""
+    r = get_redis()
+    if not r:
+        return jsonify({'error': 'Redis 未连接'}), 500
+    
+    # 提取基础符号
+    base_symbol = symbol.upper()
+    for suffix in ['_USDT', '/USDT', '-USDT', 'USDT', '_USD', '/USD', '-USD', 'USD', '_BTC', '/BTC']:
+        if base_symbol.endswith(suffix):
+            base_symbol = base_symbol[:-len(suffix)]
+            break
+    
+    try:
+        data = r.hgetall(f'contracts:{base_symbol}')
+        if data and data.get('contract_address'):
+            return jsonify({
+                'found': True,
+                'symbol': base_symbol,
+                'data': data,
+                'source': 'cache'
+            })
+        else:
+            return jsonify({
+                'found': False,
+                'symbol': base_symbol,
+                'message': '未找到缓存的合约地址，请使用 /api/find-contract 搜索'
+            })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/find-contract/<symbol>')
 def find_contract(symbol):
     """
     通过代币符号查找合约地址
-    使用 DexScreener API 搜索
+    优先使用 Redis 缓存，否则调用 DexScreener API 搜索
     """
     import requests
     
@@ -750,6 +814,30 @@ def find_contract(symbol):
             break
     
     chain = request.args.get('chain', '')
+    
+    # 先检查 Redis 缓存
+    r = get_redis()
+    if r:
+        cached = r.hgetall(f'contracts:{base_symbol}')
+        if cached and cached.get('contract_address'):
+            # 如果指定了链，检查是否匹配
+            if chain and cached.get('chain', '').lower() != chain.lower():
+                pass  # 不匹配，继续搜索
+            else:
+                return jsonify({
+                    'found': True,
+                    'symbol': base_symbol,
+                    'best_match': {
+                        'contract_address': cached.get('contract_address'),
+                        'chain': cached.get('chain', ''),
+                        'name': cached.get('name', ''),
+                        'liquidity_usd': float(cached.get('liquidity_usd', 0) or 0),
+                        'volume_24h': float(cached.get('volume_24h', 0) or 0),
+                        'price_usd': cached.get('price_usd', ''),
+                        'dex': cached.get('dex', ''),
+                    },
+                    'source': 'cache'
+                })
     
     try:
         # 使用 DexScreener API 搜索
@@ -816,6 +904,26 @@ def find_contract(symbol):
         
         if results:
             best = results[0]
+            
+            # 存储到 Redis 缓存
+            if r and best.get('contract_address'):
+                try:
+                    from datetime import datetime
+                    r.hset(f'contracts:{base_symbol}', mapping={
+                        'symbol': base_symbol,
+                        'contract_address': best['contract_address'],
+                        'chain': best.get('chain', ''),
+                        'name': best.get('name', ''),
+                        'liquidity_usd': str(best.get('liquidity_usd', 0)),
+                        'volume_24h': str(best.get('volume_24h', 0)),
+                        'price_usd': best.get('price_usd', ''),
+                        'dex': best.get('dex', ''),
+                        'source': 'dexscreener',
+                        'updated_at': datetime.utcnow().isoformat(),
+                    })
+                except Exception as cache_err:
+                    pass  # 缓存失败不影响返回结果
+            
             return jsonify({
                 'found': True,
                 'symbol': base_symbol,
