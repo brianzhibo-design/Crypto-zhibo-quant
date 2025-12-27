@@ -909,11 +909,12 @@ HTML = '''<!DOCTYPE html>
                 <div class="text-xs text-slate-400 mt-1">总事件数</div>
             </div>
             
-            <div class="card p-5">
+            <div class="card p-5 cursor-pointer hover:ring-2 hover:ring-violet-300 transition-all" onclick="showPairsModal(); loadPairs('gate');">
                 <div class="flex items-center justify-between mb-3">
                     <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
                         <i data-lucide="coins" class="w-5 h-5 text-violet-500"></i>
                     </div>
+                    <span class="text-xs text-violet-500 bg-violet-50 px-2 py-0.5 rounded-full">点击查看</span>
                 </div>
                 <div id="metricPairs" class="text-2xl font-bold text-slate-800 font-mono">--</div>
                 <div class="text-xs text-slate-400 mt-1">交易对数</div>
@@ -1098,6 +1099,48 @@ HTML = '''<!DOCTYPE html>
                 <button onclick="hideTest()" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-medium transition-colors">取消</button>
             </div>
             <div id="testResult" class="mt-3 text-sm text-center"></div>
+        </div>
+    </div>
+    
+    <!-- Pairs Modal 交易对查看弹窗 -->
+    <div id="pairsModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50" onclick="if(event.target===this)closePairsModal()">
+        <div class="card p-6 w-full max-w-4xl mx-4 max-h-[85vh] overflow-hidden flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h3 id="pairsModalTitle" class="font-semibold text-slate-700 text-lg">已知交易对</h3>
+                    <p id="pairsModalSubtitle" class="text-sm text-slate-400">共 0 个交易对</p>
+                </div>
+                <button onclick="closePairsModal()" class="text-slate-400 hover:text-slate-600 transition-colors p-2 hover:bg-slate-100 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <!-- 交易所选择 -->
+            <div class="flex flex-wrap gap-2 mb-4">
+                <button onclick="loadPairs('binance')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="binance">Binance</button>
+                <button onclick="loadPairs('okx')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="okx">OKX</button>
+                <button onclick="loadPairs('bybit')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="bybit">Bybit</button>
+                <button onclick="loadPairs('gate')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="gate">Gate</button>
+                <button onclick="loadPairs('kucoin')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="kucoin">KuCoin</button>
+                <button onclick="loadPairs('bitget')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="bitget">Bitget</button>
+                <button onclick="loadPairs('upbit')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="upbit">Upbit</button>
+                <button onclick="loadPairs('bithumb')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="bithumb">Bithumb</button>
+                <button onclick="loadPairs('mexc')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="mexc">MEXC</button>
+                <button onclick="loadPairs('htx')" class="pairs-ex-btn px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded-lg transition-colors" data-ex="htx">HTX</button>
+            </div>
+            
+            <!-- 搜索框 -->
+            <input id="pairsSearch" type="text" placeholder="搜索交易对..." 
+                   class="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 mb-4"
+                   onkeyup="filterPairs()">
+            
+            <!-- 交易对列表 -->
+            <div id="pairsList" class="flex-1 overflow-y-auto scrollbar">
+                <div class="text-center text-slate-400 py-8">
+                    <i data-lucide="database" class="w-12 h-12 mx-auto mb-4 text-slate-300"></i>
+                    <p>选择交易所查看已知交易对</p>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -1601,6 +1644,88 @@ HTML = '''<!DOCTYPE html>
 
         function exportCSV() {
             window.open('/api/export?format=csv');
+        }
+
+        // ========== 交易对查看弹窗 ==========
+        let currentPairsData = [];
+        let currentExchange = '';
+        
+        function showPairsModal() {
+            document.getElementById('pairsModal').classList.remove('hidden');
+            document.getElementById('pairsModal').classList.add('flex');
+            lucide.createIcons();
+        }
+        
+        function closePairsModal() {
+            document.getElementById('pairsModal').classList.add('hidden');
+            document.getElementById('pairsModal').classList.remove('flex');
+        }
+        
+        async function loadPairs(exchange) {
+            currentExchange = exchange;
+            
+            // 更新按钮样式
+            document.querySelectorAll('.pairs-ex-btn').forEach(btn => {
+                if (btn.dataset.ex === exchange) {
+                    btn.classList.add('bg-sky-500', 'text-white');
+                    btn.classList.remove('bg-slate-100', 'text-slate-600');
+                } else {
+                    btn.classList.remove('bg-sky-500', 'text-white');
+                    btn.classList.add('bg-slate-100', 'text-slate-600');
+                }
+            });
+            
+            document.getElementById('pairsList').innerHTML = '<div class="text-center text-slate-400 py-8">加载中...</div>';
+            
+            try {
+                const res = await fetch(`/api/pairs/${exchange}`);
+                const data = await res.json();
+                currentPairsData = data.pairs || [];
+                
+                document.getElementById('pairsModalTitle').textContent = `${exchange.toUpperCase()} 已知交易对`;
+                document.getElementById('pairsModalSubtitle').textContent = `共 ${data.total || 0} 个交易对（显示前 200 个）`;
+                
+                renderPairs(currentPairsData);
+            } catch (e) {
+                document.getElementById('pairsList').innerHTML = '<div class="text-center text-red-500 py-8">加载失败</div>';
+            }
+        }
+        
+        function filterPairs() {
+            const search = document.getElementById('pairsSearch').value.toUpperCase();
+            if (!search) {
+                renderPairs(currentPairsData);
+                return;
+            }
+            const filtered = currentPairsData.filter(p => p.toUpperCase().includes(search));
+            renderPairs(filtered);
+        }
+        
+        function renderPairs(pairs) {
+            if (!pairs.length) {
+                document.getElementById('pairsList').innerHTML = '<div class="text-center text-slate-400 py-8">暂无交易对数据</div>';
+                return;
+            }
+            
+            let h = '<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">';
+            for (const pair of pairs) {
+                // 提取基础代币
+                const base = pair.replace(/_USDT|\/USDT|-USDT|USDT|_USD|\/USD|-USD|USD/gi, '');
+                h += `
+                <div class="bg-slate-50 hover:bg-sky-50 rounded-lg p-2 text-center cursor-pointer transition-colors" onclick="searchSymbol('${base}')">
+                    <div class="font-medium text-slate-700 text-sm">${pair}</div>
+                    <div class="text-xs text-slate-400">${base}</div>
+                </div>`;
+            }
+            h += '</div>';
+            document.getElementById('pairsList').innerHTML = h;
+        }
+        
+        function searchSymbol(symbol) {
+            closePairsModal();
+            document.getElementById('searchInput').value = symbol;
+            showSearch();
+            doSearch();
         }
 
         // 消息详情弹窗
