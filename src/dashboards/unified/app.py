@@ -2047,9 +2047,6 @@ HTML = '''<!DOCTYPE html>
             <button onclick="switchTab('nodes')" id="tabNodes" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
                 <i data-lucide="server" class="w-4 h-4 inline mr-1.5"></i>节点
             </button>
-            <button onclick="switchTab('whales')" id="tabWhales" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
-                <i data-lucide="fish" class="w-4 h-4 inline mr-1.5"></i>🐋 巨鲸
-            </button>
         </div>
 
         <!-- Key Metrics -->
@@ -2180,104 +2177,6 @@ HTML = '''<!DOCTYPE html>
                     <div class="p-3 bg-slate-50 border-t border-slate-100 text-xs text-slate-400 text-center flex items-center justify-center gap-2">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-soft"></span>
                         <span id="streamStatus">连接中...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Whales Panel (Hidden by default) -->
-        <div id="panelWhales" class="hidden">
-            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                <!-- 巨鲸动态流 -->
-                <div class="xl:col-span-2">
-                    <div class="card overflow-hidden">
-                        <div class="p-4 border-b border-slate-100 bg-gradient-to-r from-cyan-50 to-blue-50 flex items-center justify-between">
-                            <div class="flex items-center gap-3">
-                                <div class="w-8 h-8 rounded-lg bg-cyan-100 flex items-center justify-center">
-                                    <span class="text-lg">🐋</span>
-                                </div>
-                                <h2 class="font-semibold text-slate-700">巨鲸动态</h2>
-                                <span class="bg-cyan-100 text-cyan-700 text-xs px-2 py-0.5 rounded-full">实时监控</span>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <button onclick="filterWhales('all')" class="whale-filter-btn text-xs px-2.5 py-1 rounded-full bg-cyan-500 text-white">全部</button>
-                                <button onclick="filterWhales('buy')" class="whale-filter-btn text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200">买入</button>
-                                <button onclick="filterWhales('sell')" class="whale-filter-btn text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200">卖出</button>
-                                <button onclick="filterWhales('exchange')" class="whale-filter-btn text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200">交易所</button>
-                            </div>
-                        </div>
-                        <div id="whaleEventsContainer" class="max-h-[600px] overflow-y-auto divide-y divide-slate-50">
-                            <div class="p-8 text-center text-slate-400">
-                                <i data-lucide="loader" class="w-8 h-8 mx-auto mb-2 animate-spin"></i>
-                                <p>加载巨鲸动态...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- 右侧统计面板 -->
-                <div class="xl:col-span-1 flex flex-col gap-4">
-                    <!-- Smart Money 统计 -->
-                    <div class="card p-4">
-                        <h3 class="font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                            <span class="text-lg">🧠</span> Smart Money 统计 (24h)
-                        </h3>
-                        <div class="grid grid-cols-3 gap-3 mb-4">
-                            <div class="text-center p-2 bg-green-50 rounded-lg">
-                                <div id="smBuyTotal" class="font-bold text-green-600">$--</div>
-                                <div class="text-xs text-slate-500">总买入</div>
-                            </div>
-                            <div class="text-center p-2 bg-red-50 rounded-lg">
-                                <div id="smSellTotal" class="font-bold text-red-600">$--</div>
-                                <div class="text-xs text-slate-500">总卖出</div>
-                            </div>
-                            <div class="text-center p-2 bg-blue-50 rounded-lg">
-                                <div id="smNetFlow" class="font-bold text-blue-600">$--</div>
-                                <div class="text-xs text-slate-500">净流向</div>
-                            </div>
-                        </div>
-                        <div class="text-xs text-slate-400 text-right">数据来源: Lookonchain</div>
-                    </div>
-                    
-                    <!-- 热门代币 -->
-                    <div class="card p-4">
-                        <h3 class="font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                            <span class="text-lg">🔥</span> Smart Money 关注 Top 5
-                        </h3>
-                        <div id="smHotTokens" class="space-y-2">
-                            <div class="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
-                                <span class="font-medium">--</span>
-                                <span class="text-xs text-slate-500">--</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- 已知巨鲸地址库 -->
-                    <div class="card p-4">
-                        <h3 class="font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                            <span class="text-lg">📋</span> 监控地址库
-                        </h3>
-                        <div class="grid grid-cols-2 gap-2 text-sm">
-                            <div class="flex items-center justify-between p-2 bg-cyan-50 rounded">
-                                <span class="text-cyan-700">🐋 巨鲸</span>
-                                <span id="whaleCount" class="font-mono font-bold text-cyan-700">--</span>
-                            </div>
-                            <div class="flex items-center justify-between p-2 bg-purple-50 rounded">
-                                <span class="text-purple-700">🧠 聪明钱</span>
-                                <span id="smartMoneyCount" class="font-mono font-bold text-purple-700">--</span>
-                            </div>
-                            <div class="flex items-center justify-between p-2 bg-orange-50 rounded">
-                                <span class="text-orange-700">🏦 交易所</span>
-                                <span id="exchangeCount" class="font-mono font-bold text-orange-700">--</span>
-                            </div>
-                            <div class="flex items-center justify-between p-2 bg-green-50 rounded">
-                                <span class="text-green-700">💼 VC</span>
-                                <span id="vcCount" class="font-mono font-bold text-green-700">--</span>
-                            </div>
-                        </div>
-                        <button onclick="showAddressLibrary()" class="w-full mt-3 text-xs text-center text-cyan-600 hover:text-cyan-800 py-1.5 border border-cyan-200 rounded-lg hover:bg-cyan-50">
-                            查看完整地址库
-                        </button>
                     </div>
                 </div>
             </div>
