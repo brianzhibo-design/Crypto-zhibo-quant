@@ -11,7 +11,8 @@ API 健康检查脚本
     0 8 * * * cd /root/v8.3_crypto_monitor && /root/v8.3_crypto_monitor/venv/bin/python scripts/api_health_check.py
 
 环境变量:
-    WECOM_WEBHOOK_URL: 企业微信机器人 Webhook URL
+    WECHAT_WEBHOOK_SIGNAL: 企业微信信号推送 Webhook URL (项目已有配置)
+    WECOM_WEBHOOK_URL: 备用企业微信 Webhook URL
     ETHERSCAN_API_KEY: Etherscan API Key
 """
 
@@ -145,7 +146,12 @@ class APIHealthChecker:
     }
     
     def __init__(self, wecom_webhook: Optional[str] = None):
-        self.wecom_webhook = wecom_webhook or os.getenv('WECOM_WEBHOOK_URL')
+        # 优先使用项目配置的 WECHAT_WEBHOOK_SIGNAL
+        self.wecom_webhook = (
+            wecom_webhook or 
+            os.getenv('WECHAT_WEBHOOK_SIGNAL') or 
+            os.getenv('WECOM_WEBHOOK_URL')
+        )
         self.session: Optional[aiohttp.ClientSession] = None
         self.results: List[APICheckResult] = []
     

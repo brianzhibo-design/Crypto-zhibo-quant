@@ -11,11 +11,16 @@ import time
 import csv
 import io
 import os
+import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
 from flask import Flask, jsonify, render_template_string, request, Response
 from flask_cors import CORS
 from dotenv import load_dotenv
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -1095,12 +1100,12 @@ def get_whale_analytics():
             total_pnl = stats['total_sell_usd'] - stats['total_buy_usd'] * 0.8  # 假设持仓有20%浮盈
             win_rate = 50  # 默认
             
-            if stats['sell_trades'] > 0:
+            if stats['sell_trades'] > 0 and stats['total_buy_usd'] > 0:
                 # 基于交易次数和金额估算胜率
                 if stats['total_sell_usd'] > stats['total_buy_usd']:
                     win_rate = min(70 + (stats['total_sell_usd'] / stats['total_buy_usd'] - 1) * 20, 90)
                 else:
-                    win_rate = max(30 + (stats['total_sell_usd'] / max(stats['total_buy_usd'], 1)) * 40, 20)
+                    win_rate = max(30 + (stats['total_sell_usd'] / stats['total_buy_usd']) * 40, 20)
             
             # 计算评分
             smart_score = 0
