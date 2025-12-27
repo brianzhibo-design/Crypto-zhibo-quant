@@ -511,23 +511,27 @@ class WhaleMonitor:
         }
 
 
-# ==================== 测试代码 ====================
+# ==================== 服务启动 ====================
 if __name__ == '__main__':
     import sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+    )
     
-    # 测试社交消息解析
+    logger.info("=== 巨鲸/聪明钱监控服务启动 ===")
+    
+    # 创建并启动监控器
     monitor = WhaleMonitor()
     
-    test_messages = [
-        "🐋 A whale bought 500,000 $PEPE worth $125,000 from Uniswap. Address: 0x020cA66C30beC2c4Fe3861a94E4DB4A498A35872",
-        "🚨 2,000 ETH ($4.8M) transferred from 0x1234...5678 to Binance",
-        "Smart money address 0xabcd...ef12 accumulated 1M $ARB in the past 24h",
-    ]
-    
-    for msg in test_messages:
-        result = monitor.parse_social_message(msg)
-        print(f"\n消息: {msg[:50]}...")
-        print(f"解析结果: {result}")
+    try:
+        asyncio.run(monitor.start())
+    except KeyboardInterrupt:
+        logger.info("收到停止信号，正在关闭...")
+    except Exception as e:
+        logger.error(f"服务异常退出: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
