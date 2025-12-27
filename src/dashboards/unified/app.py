@@ -2697,7 +2697,7 @@ HTML = '''<!DOCTYPE html>
                 <div class="text-xs text-slate-400 mt-1">总事件数</div>
             </div>
             
-            <div class="card p-5 cursor-pointer hover:ring-2 hover:ring-violet-300 transition-all" onclick="showPairsModal(); loadPairs('binance');">
+            <div class="card p-5 cursor-pointer hover:ring-2 hover:ring-violet-300 transition-all" onclick="filterByCategory('all');">
                 <div class="flex items-center justify-between mb-3">
                     <div class="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
                         <i data-lucide="coins" class="w-5 h-5 text-violet-500"></i>
