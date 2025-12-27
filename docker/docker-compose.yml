@@ -24,6 +24,8 @@ networks:
 volumes:
   redis_data:
     driver: local
+  postgres_data:
+    driver: local
   prometheus_data:
     driver: local
   grafana_data:
@@ -71,6 +73,42 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # ----------------------------------------------------------
+  # PostgreSQL 数据库 (持久化存储)
+  # ----------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: crypto-postgres
+    restart: always
+    environment:
+      <<: *common-env
+      POSTGRES_USER: ${POSTGRES_USER:-crypto}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CryptoMonitor2025}
+      POSTGRES_DB: ${POSTGRES_DB:-crypto}
+      # 性能优化
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../scripts/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - crypto_net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.2'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crypto} -d ${POSTGRES_DB:-crypto}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # ----------------------------------------------------------
   # 采集器服务
