@@ -2471,18 +2471,118 @@ HTML = '''<!DOCTYPE html>
                         <button onclick="switchChartInterval('1d')" class="chart-interval-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-sky-100">1d</button>
                     </div>
                 </div>
-                <div id="chartStatus" class="text-xs text-slate-400">
-                    <span id="chartLiveIndicator" class="inline-block w-2 h-2 rounded-full bg-green-500 mr-1 animate-pulse"></span>
-                    实时
+                <div class="flex items-center gap-2">
+                    <button onclick="toggleIndicatorPanel()" class="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1 transition">
+                        <i data-lucide="settings-2" class="w-3 h-3"></i>
+                        指标
+                    </button>
+                    <div id="chartStatus" class="text-xs text-slate-400">
+                        <span id="chartLiveIndicator" class="inline-block w-2 h-2 rounded-full bg-green-500 mr-1 animate-pulse"></span>
+                        实时
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 指标配置面板 -->
+            <div id="indicatorPanel" class="hidden bg-white border border-slate-200 rounded-xl p-4 mb-2 shadow-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <h4 class="font-semibold text-slate-700">📊 指标设置</h4>
+                    <button onclick="toggleIndicatorPanel()" class="text-slate-400 hover:text-slate-600">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                
+                <!-- 均线设置 -->
+                <div class="mb-3">
+                    <div class="text-xs font-medium text-slate-500 mb-2">均线</div>
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="ma1Enabled" checked class="w-4 h-4 rounded">
+                            <span class="text-xs">MA1</span>
+                            <input type="number" id="ma1Period" value="20" class="w-14 text-xs px-2 py-1 border rounded">
+                            <select id="ma1Type" class="text-xs px-2 py-1 border rounded">
+                                <option value="EMA" selected>EMA</option>
+                                <option value="SMA">SMA</option>
+                            </select>
+                            <input type="color" id="ma1Color" value="#f59e0b" class="w-6 h-6">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="ma2Enabled" checked class="w-4 h-4 rounded">
+                            <span class="text-xs">MA2</span>
+                            <input type="number" id="ma2Period" value="50" class="w-14 text-xs px-2 py-1 border rounded">
+                            <select id="ma2Type" class="text-xs px-2 py-1 border rounded">
+                                <option value="EMA">EMA</option>
+                                <option value="SMA" selected>SMA</option>
+                            </select>
+                            <input type="color" id="ma2Color" value="#8b5cf6" class="w-6 h-6">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" id="ma3Enabled" class="w-4 h-4 rounded">
+                            <span class="text-xs">MA3</span>
+                            <input type="number" id="ma3Period" value="120" class="w-14 text-xs px-2 py-1 border rounded">
+                            <select id="ma3Type" class="text-xs px-2 py-1 border rounded">
+                                <option value="EMA">EMA</option>
+                                <option value="SMA" selected>SMA</option>
+                            </select>
+                            <input type="color" id="ma3Color" value="#06b6d4" class="w-6 h-6">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- MASR 通道设置 -->
+                <div class="mb-3">
+                    <div class="text-xs font-medium text-slate-500 mb-2">MASR 通道</div>
+                    <div class="flex items-center gap-3">
+                        <label class="flex items-center gap-1">
+                            <input type="checkbox" id="masrEnabled" checked class="w-4 h-4 rounded">
+                            <span class="text-xs">启用</span>
+                        </label>
+                        <label class="text-xs">周期: <input type="number" id="masrLength" value="120" class="w-14 px-2 py-1 border rounded"></label>
+                        <label class="text-xs">内侧: <input type="number" id="masrInner" value="1.9" step="0.1" class="w-14 px-2 py-1 border rounded"></label>
+                        <label class="text-xs">外侧: <input type="number" id="masrOuter" value="8" step="0.5" class="w-14 px-2 py-1 border rounded"></label>
+                    </div>
+                </div>
+                
+                <!-- VWMA Lyro RS 设置 -->
+                <div class="mb-3">
+                    <div class="text-xs font-medium text-slate-500 mb-2">VWMA Lyro RS</div>
+                    <div class="flex items-center gap-3">
+                        <label class="flex items-center gap-1">
+                            <input type="checkbox" id="vwmaEnabled" class="w-4 h-4 rounded">
+                            <span class="text-xs">启用</span>
+                        </label>
+                        <label class="text-xs">周期: <input type="number" id="vwmaPeriod" value="65" class="w-14 px-2 py-1 border rounded"></label>
+                        <label class="text-xs">多阈值: <input type="number" id="vwmaLong" value="0.9" step="0.1" class="w-14 px-2 py-1 border rounded"></label>
+                        <label class="text-xs">空阈值: <input type="number" id="vwmaShort" value="-0.9" step="0.1" class="w-14 px-2 py-1 border rounded"></label>
+                    </div>
+                </div>
+                
+                <!-- 按钮 -->
+                <div class="flex gap-2 pt-2 border-t border-slate-100">
+                    <button onclick="resetIndicatorConfig()" class="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg transition">重置默认</button>
+                    <button onclick="applyIndicatorConfig()" class="text-xs px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition">应用</button>
                 </div>
             </div>
             
             <!-- K线图表 -->
-            <div class="bg-slate-50 rounded-xl p-2 mb-4 flex-1 min-h-[300px] relative">
-                <div id="tokenChart" class="w-full h-full min-h-[280px]"></div>
+            <div class="bg-slate-50 rounded-xl p-2 mb-2 flex-1 min-h-[260px] relative">
+                <div id="tokenChart" class="w-full h-full min-h-[240px]"></div>
                 <div id="chartLoading" class="absolute inset-0 flex items-center justify-center bg-slate-50/80 hidden">
                     <div class="text-slate-400 text-sm">加载中...</div>
                 </div>
+            </div>
+            
+            <!-- RSI/MACD 副图 -->
+            <div class="bg-slate-50 rounded-xl p-2 mb-4 h-[100px] relative">
+                <div class="flex items-center justify-between mb-1">
+                    <div class="flex items-center gap-2">
+                        <button onclick="switchSubChart('rsi')" id="btnRSI" class="px-2 py-0.5 text-xs rounded bg-blue-500 text-white">RSI</button>
+                        <button onclick="switchSubChart('macd')" id="btnMACD" class="px-2 py-0.5 text-xs rounded bg-slate-200 text-slate-600 hover:bg-slate-300">MACD</button>
+                        <button onclick="switchSubChart('vwma')" id="btnVWMA" class="px-2 py-0.5 text-xs rounded bg-slate-200 text-slate-600 hover:bg-slate-300">VWMA</button>
+                    </div>
+                    <span id="subChartValue" class="text-xs text-slate-500">RSI(14): --</span>
+                </div>
+                <div id="subChart" class="w-full h-[70px]"></div>
             </div>
             
             <!-- 多交易所行情 -->
@@ -2490,6 +2590,45 @@ HTML = '''<!DOCTYPE html>
                 <h4 class="text-sm font-semibold text-slate-600 mb-2">📊 各交易所实时行情</h4>
                 <div id="tokenExchangePrices" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-[120px] overflow-y-auto">
                     <div class="text-center text-slate-400 py-4">加载中...</div>
+                </div>
+            </div>
+            
+            <!-- 策略信号面板 -->
+            <div class="bg-gradient-to-r from-slate-50 to-blue-50 rounded-xl p-3 mb-4 border border-slate-200">
+                <div class="flex items-center justify-between mb-2">
+                    <h4 class="text-sm font-semibold text-slate-600 flex items-center gap-2">
+                        <i data-lucide="target" class="w-4 h-4 text-blue-500"></i>
+                        策略信号
+                    </h4>
+                    <span id="signalUpdateTime" class="text-xs text-slate-400">--</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- MASR 策略 -->
+                    <div class="bg-white rounded-lg p-2.5 border border-slate-100">
+                        <div class="text-xs text-slate-400 mb-1">MASR 趋势策略</div>
+                        <div class="flex items-center gap-2">
+                            <span id="masrTrend" class="text-sm font-medium">--</span>
+                            <span id="masrSignal" class="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">无信号</span>
+                        </div>
+                    </div>
+                    <!-- VWMA 策略 -->
+                    <div class="bg-white rounded-lg p-2.5 border border-slate-100">
+                        <div class="text-xs text-slate-400 mb-1">VWMA Lyro RS</div>
+                        <div class="flex items-center gap-2">
+                            <span id="vwmaScore" class="text-sm font-medium">--</span>
+                            <span id="vwmaSignal" class="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">中性</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- 综合判断 -->
+                <div class="mt-2 pt-2 border-t border-slate-100">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-slate-400">综合判断</span>
+                        <div class="flex items-center gap-2">
+                            <span id="overallDirection" class="text-sm font-medium text-slate-700">--</span>
+                            <span id="overallStrength" class="text-xs">⭐⭐⭐☆☆</span>
+                        </div>
+                    </div>
                 </div>
             </div>
             
@@ -3753,6 +3892,825 @@ HTML = '''<!DOCTYPE html>
         let currentChartInterval = '15m';
         let currentChartExchange = 'binance';
         
+        // 均线系列
+        let maSeries = {};
+        let masrChannelSeries = {};
+        
+        // 副图相关变量
+        let subChart = null;
+        let subChartSeries = null;
+        let currentSubChartType = 'rsi';
+        let cachedCandles = [];  // 缓存 K 线数据用于副图计算
+        let klineData = [];
+        
+        // 指标配置
+        let indicatorConfig = {
+            ma: [
+                { enabled: true, period: 20, type: 'EMA', color: '#f59e0b', width: 1.5 },
+                { enabled: true, period: 50, type: 'SMA', color: '#8b5cf6', width: 1.5 },
+                { enabled: false, period: 120, type: 'SMA', color: '#06b6d4', width: 1 },
+                { enabled: false, period: 200, type: 'SMA', color: '#ec4899', width: 1 },
+            ],
+            masr: {
+                enabled: true,
+                length: 120,
+                innerWidth: 1.9,  // x 内侧通道宽度
+                outerWidth: 8,   // y 外侧通道宽度
+                smoothing: 'SMA',
+            },
+            vwmaLyro: {
+                enabled: false,
+                period: 65,
+                smoothLen: 5,
+                longThreshold: 0.9,
+                shortThreshold: -0.9,
+            }
+        };
+        
+        // 尝试从 localStorage 加载配置
+        try {
+            const savedConfig = localStorage.getItem('chartIndicatorConfig');
+            if (savedConfig) {
+                indicatorConfig = { ...indicatorConfig, ...JSON.parse(savedConfig) };
+            }
+        } catch (e) {}
+        
+        // ==================== 技术指标计算函数 ====================
+        
+        // SMA 简单移动平均
+        function calcSMA(data, period) {
+            const result = [];
+            for (let i = 0; i < data.length; i++) {
+                if (i < period - 1) {
+                    result.push(null);
+                } else {
+                    let sum = 0;
+                    for (let j = 0; j < period; j++) {
+                        sum += data[i - j].close;
+                    }
+                    result.push({ time: data[i].time, value: sum / period });
+                }
+            }
+            return result.filter(x => x !== null);
+        }
+        
+        // EMA 指数移动平均
+        function calcEMA(data, period) {
+            const result = [];
+            const k = 2 / (period + 1);
+            let ema = null;
+            
+            for (let i = 0; i < data.length; i++) {
+                if (i < period - 1) {
+                    result.push(null);
+                } else if (ema === null) {
+                    // 第一个 EMA 值用 SMA 初始化
+                    let sum = 0;
+                    for (let j = 0; j < period; j++) {
+                        sum += data[i - j].close;
+                    }
+                    ema = sum / period;
+                    result.push({ time: data[i].time, value: ema });
+                } else {
+                    ema = data[i].close * k + ema * (1 - k);
+                    result.push({ time: data[i].time, value: ema });
+                }
+            }
+            return result.filter(x => x !== null);
+        }
+        
+        // WMA 加权移动平均
+        function calcWMA(data, period) {
+            const result = [];
+            const denominator = period * (period + 1) / 2;
+            
+            for (let i = 0; i < data.length; i++) {
+                if (i < period - 1) {
+                    result.push(null);
+                } else {
+                    let sum = 0;
+                    for (let j = 0; j < period; j++) {
+                        sum += data[i - j].close * (period - j);
+                    }
+                    result.push({ time: data[i].time, value: sum / denominator });
+                }
+            }
+            return result.filter(x => x !== null);
+        }
+        
+        // HMA Hull移动平均
+        function calcHMA(data, period) {
+            const halfPeriod = Math.floor(period / 2);
+            const sqrtPeriod = Math.floor(Math.sqrt(period));
+            
+            // 计算 WMA(period/2) * 2
+            const wmaHalf = calcWMA(data, halfPeriod);
+            // 计算 WMA(period)
+            const wmaFull = calcWMA(data, period);
+            
+            if (wmaHalf.length < sqrtPeriod || wmaFull.length < sqrtPeriod) {
+                return [];
+            }
+            
+            // 构建差值数据
+            const diffData = [];
+            const minLen = Math.min(wmaHalf.length, wmaFull.length);
+            const offset = wmaHalf.length - minLen;
+            
+            for (let i = 0; i < minLen; i++) {
+                diffData.push({
+                    time: wmaHalf[offset + i].time,
+                    close: 2 * wmaHalf[offset + i].value - wmaFull[i].value
+                });
+            }
+            
+            // 对差值计算 WMA(sqrt(period))
+            return calcWMA(diffData, sqrtPeriod);
+        }
+        
+        // 通用 MA 计算
+        function calcMA(data, period, type) {
+            switch (type) {
+                case 'SMA': return calcSMA(data, period);
+                case 'EMA': return calcEMA(data, period);
+                case 'WMA': return calcWMA(data, period);
+                case 'HMA': return calcHMA(data, period);
+                default: return calcSMA(data, period);
+            }
+        }
+        
+        // TR True Range
+        function calcTR(data) {
+            const result = [];
+            for (let i = 0; i < data.length; i++) {
+                if (i === 0) {
+                    result.push(data[i].high - data[i].low);
+                } else {
+                    const prevClose = data[i - 1].close;
+                    const tr = Math.max(
+                        data[i].high - data[i].low,
+                        Math.abs(data[i].high - prevClose),
+                        Math.abs(data[i].low - prevClose)
+                    );
+                    result.push(tr);
+                }
+            }
+            return result;
+        }
+        
+        // MASR 通道计算
+        function calcMASRChannel(data, length, x, y, smoothing) {
+            if (data.length < length) return { inner: null, outer: null, basis: null };
+            
+            const tr = calcTR(data);
+            
+            // 创建用于计算 MA 的临时数据结构
+            const serie1Data = data.map((d, i) => ({
+                time: d.time,
+                close: d.close > d.open ? d.close : (d.close < d.open ? d.open : d.high)
+            }));
+            const serie2Data = data.map((d, i) => ({
+                time: d.time,
+                close: d.close < d.open ? d.close : (d.close > d.open ? d.open : d.low)
+            }));
+            const hlc3Data = data.map(d => ({
+                time: d.time,
+                close: (d.high + d.low + d.close) / 3
+            }));
+            const trData = tr.map((v, i) => ({
+                time: data[i].time,
+                close: v
+            }));
+            
+            // 计算各个 MA
+            const maSerie1 = calcMA(serie1Data, length, smoothing);
+            const maSerie2 = calcMA(serie2Data, length, smoothing);
+            const maBasis = calcMA(hlc3Data, length, smoothing);
+            const maTR = calcMA(trData, length, smoothing);
+            
+            // 确保数组长度一致
+            const minLen = Math.min(maSerie1.length, maSerie2.length, maBasis.length, maTR.length);
+            
+            // 构建通道数据
+            const bottom = [], top = [], bottom1 = [], top1 = [], basis = [];
+            
+            for (let i = 0; i < minLen; i++) {
+                const time = maBasis[i].time;
+                const basisVal = maBasis[i].value;
+                const trVal = maTR[i].value;
+                const s1 = maSerie1[i].value;
+                const s2 = maSerie2[i].value;
+                
+                bottom.push({ time, value: s1 - x * trVal });
+                top.push({ time, value: s2 + x * trVal });
+                bottom1.push({ time, value: s1 - y * trVal });
+                top1.push({ time, value: s2 + y * trVal });
+                basis.push({ time, value: basisVal });
+            }
+            
+            return { bottom, top, bottom1, top1, basis };
+        }
+        
+        // RSI 计算
+        function calcRSI(data, period = 14) {
+            const result = [];
+            let avgGain = 0, avgLoss = 0;
+            
+            for (let i = 1; i < data.length; i++) {
+                const change = data[i].close - data[i - 1].close;
+                const gain = change > 0 ? change : 0;
+                const loss = change < 0 ? -change : 0;
+                
+                if (i < period) {
+                    avgGain += gain;
+                    avgLoss += loss;
+                    result.push(null);
+                } else if (i === period) {
+                    avgGain = (avgGain + gain) / period;
+                    avgLoss = (avgLoss + loss) / period;
+                    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+                    result.push({ time: data[i].time, value: 100 - (100 / (1 + rs)) });
+                } else {
+                    avgGain = (avgGain * (period - 1) + gain) / period;
+                    avgLoss = (avgLoss * (period - 1) + loss) / period;
+                    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+                    result.push({ time: data[i].time, value: 100 - (100 / (1 + rs)) });
+                }
+            }
+            return result.filter(x => x !== null);
+        }
+        
+        // MACD 计算
+        function calcMACD(data, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
+            const fastEMA = calcEMA(data, fastPeriod);
+            const slowEMA = calcEMA(data, slowPeriod);
+            
+            // 对齐
+            const offset = fastEMA.length - slowEMA.length;
+            const macdLine = [];
+            
+            for (let i = 0; i < slowEMA.length; i++) {
+                const fastVal = fastEMA[offset + i].value;
+                const slowVal = slowEMA[i].value;
+                macdLine.push({
+                    time: slowEMA[i].time,
+                    close: fastVal - slowVal
+                });
+            }
+            
+            // 信号线
+            const signalLine = calcEMA(macdLine, signalPeriod);
+            
+            // 柱状图
+            const histogram = [];
+            const sigOffset = macdLine.length - signalLine.length;
+            for (let i = 0; i < signalLine.length; i++) {
+                const macdVal = macdLine[sigOffset + i].close;
+                const sigVal = signalLine[i].value;
+                histogram.push({
+                    time: signalLine[i].time,
+                    value: macdVal - sigVal,
+                    color: macdVal - sigVal >= 0 ? '#22c55e' : '#ef4444'
+                });
+            }
+            
+            return {
+                macd: macdLine.map(d => ({ time: d.time, value: d.close })),
+                signal: signalLine,
+                histogram
+            };
+        }
+        
+        // MASR 通道策略计算 (MA + ATR 动态通道)
+        function calcMASR(data, config) {
+            const length = config.length || 120;
+            const innerMult = config.innerWidth || 1.9;
+            const outerMult = config.outerWidth || 8;
+            if (data.length < length) return null;
+            
+            const result = {
+                bottom: [],
+                top: [],
+                bottom1: [],
+                top1: [],
+                basis: []
+            };
+            
+            // 计算 True Range
+            const tr = [];
+            for (let i = 0; i < data.length; i++) {
+                const high = data[i].high;
+                const low = data[i].low;
+                const prevClose = i > 0 ? data[i-1].close : data[i].open;
+                const trVal = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+                tr.push({ time: data[i].time, value: trVal });
+            }
+            
+            // 计算 serie1 (上影线基准) 和 serie2 (下影线基准)
+            const serie1 = data.map(d => ({
+                time: d.time,
+                value: d.close > d.open ? d.close : d.open
+            }));
+            const serie2 = data.map(d => ({
+                time: d.time,
+                value: d.close < d.open ? d.close : d.open
+            }));
+            
+            // 计算各种 MA
+            const calcMA = (arr, period) => {
+                const result = [];
+                for (let i = period - 1; i < arr.length; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < period; j++) {
+                        sum += arr[i - j].value;
+                    }
+                    result.push({ time: arr[i].time, value: sum / period });
+                }
+                return result;
+            };
+            
+            const maSerie1 = calcMA(serie1, length);
+            const maSerie2 = calcMA(serie2, length);
+            const maTR = calcMA(tr, length);
+            
+            // 对齐数据
+            const startIdx = length - 1;
+            
+            for (let i = 0; i < maTR.length; i++) {
+                const time = maTR[i].time;
+                const trVal = maTR[i].value;
+                const s1Val = maSerie1[i].value;
+                const s2Val = maSerie2[i].value;
+                
+                // 内侧通道
+                const bottom = s1Val - innerMult * trVal;
+                const top = s2Val + innerMult * trVal;
+                
+                // 外侧通道
+                const bottom1 = s1Val - outerMult * trVal;
+                const top1 = s2Val + outerMult * trVal;
+                
+                // 中轨 (basis)
+                const basis = (s1Val + s2Val) / 2;
+                
+                result.bottom.push({ time, value: bottom });
+                result.top.push({ time, value: top });
+                result.bottom1.push({ time, value: bottom1 });
+                result.top1.push({ time, value: top1 });
+                result.basis.push({ time, value: basis });
+            }
+            
+            return result;
+        }
+        
+        // VWMA Lyro RS 评分系统计算
+        function calcVWMALyroRS(data, config) {
+            const { period, smoothLength, longThreshold, shortThreshold } = config;
+            if (data.length < period) return null;
+            
+            // 简化版 VWMA (使用成交量加权)
+            // 由于前端没有成交量数据，这里使用价格变化幅度作为权重
+            const calcVWMA = (arr, len) => {
+                const result = [];
+                for (let i = len - 1; i < arr.length; i++) {
+                    let sumPV = 0;
+                    let sumV = 0;
+                    for (let j = 0; j < len; j++) {
+                        const d = arr[i - j];
+                        const weight = Math.abs(d.high - d.low) || 1;
+                        sumPV += d.close * weight;
+                        sumV += weight;
+                    }
+                    result.push({ time: arr[i].time, value: sumPV / sumV });
+                }
+                return result;
+            };
+            
+            // 计算不同周期的 MA 评分
+            const periods = [10, 20, 30, 50, 100, 200];
+            const scores = [];
+            
+            for (let i = 0; i < data.length; i++) {
+                let totalScore = 0;
+                let count = 0;
+                
+                periods.forEach(p => {
+                    if (i >= p - 1) {
+                        // 计算 SMA
+                        let sum = 0;
+                        for (let j = 0; j < p; j++) {
+                            sum += data[i - j].close;
+                        }
+                        const ma = sum / p;
+                        const close = data[i].close;
+                        
+                        // 评分：价格在 MA 之上为正，之下为负
+                        const score = close > ma ? 1 : (close < ma ? -1 : 0);
+                        totalScore += score;
+                        count++;
+                    }
+                });
+                
+                if (count > 0) {
+                    scores.push({
+                        time: data[i].time,
+                        value: totalScore / count
+                    });
+                }
+            }
+            
+            // 平滑
+            if (smoothLength > 1) {
+                const smoothed = [];
+                for (let i = smoothLength - 1; i < scores.length; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < smoothLength; j++) {
+                        sum += scores[i - j].value;
+                    }
+                    smoothed.push({
+                        time: scores[i].time,
+                        value: sum / smoothLength
+                    });
+                }
+                return smoothed;
+            }
+            
+            return scores;
+        }
+        
+        // 检测 MASR 策略信号
+        function detectMASRSignals(candles, masrData) {
+            const signals = [];
+            if (!masrData || !masrData.bottom || masrData.bottom.length < 2) return signals;
+            
+            // 找到对齐的起始点
+            const startIdx = candles.length - masrData.bottom.length;
+            
+            for (let i = 1; i < masrData.bottom.length; i++) {
+                const candleIdx = startIdx + i;
+                if (candleIdx < 0 || candleIdx >= candles.length) continue;
+                
+                const candle = candles[candleIdx];
+                const prevCandle = candles[candleIdx - 1];
+                const bottom1 = masrData.bottom1[i].value;
+                const top1 = masrData.top1[i].value;
+                const prevBottom1 = masrData.bottom1[i-1]?.value;
+                const prevTop1 = masrData.top1[i-1]?.value;
+                const innerBottom = masrData.bottom[i].value;
+                const innerTop = masrData.top[i].value;
+                
+                // 趋势突破信号：价格突破外侧通道
+                if (prevCandle && prevCandle.close < prevBottom1 && candle.close > bottom1) {
+                    signals.push({
+                        time: candle.time,
+                        position: 'belowBar',
+                        color: '#22c55e',
+                        shape: 'arrowUp',
+                        text: 'Trend BUY'
+                    });
+                } else if (prevCandle && prevCandle.close > prevTop1 && candle.close < top1) {
+                    signals.push({
+                        time: candle.time,
+                        position: 'aboveBar',
+                        color: '#ef4444',
+                        shape: 'arrowDown',
+                        text: 'Trend SELL'
+                    });
+                }
+                
+                // 回踩信号：价格触及内侧通道
+                if (candle.low <= innerBottom && candle.close > innerBottom) {
+                    signals.push({
+                        time: candle.time,
+                        position: 'belowBar',
+                        color: '#86efac',
+                        shape: 'circle',
+                        text: 'BUY'
+                    });
+                } else if (candle.high >= innerTop && candle.close < innerTop) {
+                    signals.push({
+                        time: candle.time,
+                        position: 'aboveBar',
+                        color: '#fca5a5',
+                        shape: 'circle',
+                        text: 'SELL'
+                    });
+                }
+            }
+            
+            return signals;
+        }
+        
+        // 检测 VWMA Lyro RS 信号
+        function detectVWMASignals(candles, vwmaData) {
+            const signals = [];
+            if (!vwmaData || vwmaData.length < 2) return signals;
+            
+            const startIdx = candles.length - vwmaData.length;
+            const longThreshold = 0.9;
+            const shortThreshold = -0.9;
+            
+            for (let i = 1; i < vwmaData.length; i++) {
+                const candleIdx = startIdx + i;
+                if (candleIdx < 0 || candleIdx >= candles.length) continue;
+                
+                const candle = candles[candleIdx];
+                const score = vwmaData[i].value;
+                const prevScore = vwmaData[i-1].value;
+                
+                // 多头信号：评分突破阈值
+                if (prevScore < longThreshold && score >= longThreshold) {
+                    signals.push({
+                        time: candle.time,
+                        position: 'belowBar',
+                        color: '#06b6d4',
+                        shape: 'arrowUp',
+                        text: 'Long'
+                    });
+                }
+                // 空头信号
+                else if (prevScore > shortThreshold && score <= shortThreshold) {
+                    signals.push({
+                        time: candle.time,
+                        position: 'aboveBar',
+                        color: '#f59e0b',
+                        shape: 'arrowDown',
+                        text: 'Short'
+                    });
+                }
+                // 超卖反转
+                else if (prevScore <= shortThreshold && score > shortThreshold) {
+                    signals.push({
+                        time: candle.time,
+                        position: 'belowBar',
+                        color: '#a855f7',
+                        shape: 'circle',
+                        text: 'OS Rev'
+                    });
+                }
+                // 超买反转
+                else if (prevScore >= longThreshold && score < longThreshold) {
+                    signals.push({
+                        time: candle.time,
+                        position: 'aboveBar',
+                        color: '#ec4899',
+                        shape: 'circle',
+                        text: 'OB Rev'
+                    });
+                }
+            }
+            
+            return signals;
+        }
+        
+        // 融合两个策略的信号
+        function fuseStrategySignals(masrSignals, vwmaSignals) {
+            const fused = [];
+            const timeWindow = 60 * 60 * 4; // 4小时窗口
+            
+            // 找到强信号：两个策略在同一时间窗口内都发出同方向信号
+            for (const m of masrSignals) {
+                if (m.text.includes('Trend')) {
+                    const isBuy = m.text.includes('BUY');
+                    
+                    // 在 VWMA 信号中查找对应信号
+                    const matching = vwmaSignals.find(v => {
+                        const timeDiff = Math.abs(v.time - m.time);
+                        const samDirection = (isBuy && v.text === 'Long') || (!isBuy && v.text === 'Short');
+                        return timeDiff <= timeWindow && samDirection;
+                    });
+                    
+                    if (matching) {
+                        fused.push({
+                            time: m.time,
+                            position: isBuy ? 'belowBar' : 'aboveBar',
+                            color: isBuy ? '#00ff00' : '#ff0000',
+                            shape: 'square',
+                            text: isBuy ? '★ STRONG BUY' : '★ STRONG SELL'
+                        });
+                    }
+                }
+            }
+            
+            return fused;
+        }
+        
+        // 切换指标配置面板
+        function toggleIndicatorPanel() {
+            const panel = document.getElementById('indicatorPanel');
+            panel.classList.toggle('hidden');
+            
+            if (!panel.classList.contains('hidden')) {
+                // 同步配置到表单
+                syncConfigToForm();
+            }
+            lucide.createIcons();
+        }
+        
+        // 将配置同步到表单
+        function syncConfigToForm() {
+            // MA 配置
+            for (let i = 0; i < 3; i++) {
+                const cfg = indicatorConfig.ma[i];
+                document.getElementById(`ma${i+1}Enabled`).checked = cfg.enabled;
+                document.getElementById(`ma${i+1}Period`).value = cfg.period;
+                document.getElementById(`ma${i+1}Type`).value = cfg.type;
+                document.getElementById(`ma${i+1}Color`).value = cfg.color;
+            }
+            
+            // MASR 配置
+            document.getElementById('masrEnabled').checked = indicatorConfig.masr.enabled;
+            document.getElementById('masrLength').value = indicatorConfig.masr.length;
+            document.getElementById('masrInner').value = indicatorConfig.masr.innerWidth;
+            document.getElementById('masrOuter').value = indicatorConfig.masr.outerWidth;
+            
+            // VWMA 配置
+            document.getElementById('vwmaEnabled').checked = indicatorConfig.vwmaLyro.enabled;
+            document.getElementById('vwmaPeriod').value = indicatorConfig.vwmaLyro.period;
+            document.getElementById('vwmaLong').value = indicatorConfig.vwmaLyro.longThreshold;
+            document.getElementById('vwmaShort').value = indicatorConfig.vwmaLyro.shortThreshold;
+        }
+        
+        // 应用指标配置
+        function applyIndicatorConfig() {
+            // 读取 MA 配置
+            for (let i = 0; i < 3; i++) {
+                indicatorConfig.ma[i] = {
+                    enabled: document.getElementById(`ma${i+1}Enabled`).checked,
+                    period: parseInt(document.getElementById(`ma${i+1}Period`).value) || 20,
+                    type: document.getElementById(`ma${i+1}Type`).value,
+                    color: document.getElementById(`ma${i+1}Color`).value,
+                    width: 1.5
+                };
+            }
+            
+            // 读取 MASR 配置
+            indicatorConfig.masr = {
+                enabled: document.getElementById('masrEnabled').checked,
+                length: parseInt(document.getElementById('masrLength').value) || 120,
+                innerWidth: parseFloat(document.getElementById('masrInner').value) || 1.9,
+                outerWidth: parseFloat(document.getElementById('masrOuter').value) || 8,
+                smoothing: 'SMA'
+            };
+            
+            // 读取 VWMA 配置
+            indicatorConfig.vwmaLyro = {
+                enabled: document.getElementById('vwmaEnabled').checked,
+                period: parseInt(document.getElementById('vwmaPeriod').value) || 65,
+                smoothLen: 5,
+                longThreshold: parseFloat(document.getElementById('vwmaLong').value) || 0.9,
+                shortThreshold: parseFloat(document.getElementById('vwmaShort').value) || -0.9
+            };
+            
+            // 保存配置
+            try {
+                localStorage.setItem('crypto_indicator_config', JSON.stringify(indicatorConfig));
+            } catch (e) {}
+            
+            // 关闭面板
+            document.getElementById('indicatorPanel').classList.add('hidden');
+            
+            // 重新加载图表
+            if (currentChartSymbol) {
+                loadTokenChart(currentChartSymbol);
+            }
+        }
+        
+        // 重置指标配置
+        function resetIndicatorConfig() {
+            indicatorConfig = {
+                ma: [
+                    { enabled: true, period: 20, type: 'EMA', color: '#f59e0b', width: 1.5 },
+                    { enabled: true, period: 50, type: 'SMA', color: '#8b5cf6', width: 1.5 },
+                    { enabled: false, period: 120, type: 'SMA', color: '#06b6d4', width: 1 },
+                    { enabled: false, period: 200, type: 'SMA', color: '#ec4899', width: 1 },
+                ],
+                masr: {
+                    enabled: true,
+                    length: 120,
+                    innerWidth: 1.9,
+                    outerWidth: 8,
+                    smoothing: 'SMA',
+                },
+                vwmaLyro: {
+                    enabled: false,
+                    period: 65,
+                    smoothLen: 5,
+                    longThreshold: 0.9,
+                    shortThreshold: -0.9,
+                }
+            };
+            
+            syncConfigToForm();
+            
+            // 保存配置
+            try {
+                localStorage.setItem('crypto_indicator_config', JSON.stringify(indicatorConfig));
+            } catch (e) {}
+        }
+        
+        // 更新策略信号面板
+        function updateStrategyPanel(candles, masrData) {
+            const now = new Date().toLocaleTimeString('zh-CN', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Shanghai'});
+            document.getElementById('signalUpdateTime').textContent = `更新: ${now}`;
+            
+            // MASR 趋势判断
+            if (masrData && masrData.basis && masrData.basis.length > 0) {
+                const lastCandle = candles[candles.length - 1];
+                const lastBasis = masrData.basis[masrData.basis.length - 1].value;
+                const lastBottom = masrData.bottom[masrData.bottom.length - 1].value;
+                const lastTop = masrData.top[masrData.top.length - 1].value;
+                
+                let trendText = '中性';
+                let trendClass = 'text-slate-600';
+                if (lastCandle.close > lastBasis) {
+                    trendText = '📈 多头';
+                    trendClass = 'text-green-600';
+                } else if (lastCandle.close < lastBasis) {
+                    trendText = '📉 空头';
+                    trendClass = 'text-red-600';
+                }
+                
+                document.getElementById('masrTrend').textContent = trendText;
+                document.getElementById('masrTrend').className = `text-sm font-medium ${trendClass}`;
+                
+                // 判断最新信号
+                let masrSignalText = '无信号';
+                let masrSignalClass = 'bg-slate-100 text-slate-500';
+                if (lastCandle.low <= lastBottom) {
+                    masrSignalText = '回踩支撑';
+                    masrSignalClass = 'bg-green-100 text-green-600';
+                } else if (lastCandle.high >= lastTop) {
+                    masrSignalText = '触及阻力';
+                    masrSignalClass = 'bg-red-100 text-red-600';
+                }
+                
+                document.getElementById('masrSignal').textContent = masrSignalText;
+                document.getElementById('masrSignal').className = `text-xs px-1.5 py-0.5 rounded ${masrSignalClass}`;
+            }
+            
+            // VWMA Lyro RS 评分
+            const vwmaData = calcVWMALyroRS(candles, indicatorConfig.vwmaLyro);
+            if (vwmaData && vwmaData.length > 0) {
+                const lastScore = vwmaData[vwmaData.length - 1].value;
+                const scoreText = lastScore.toFixed(2);
+                
+                let scoreClass = 'text-slate-600';
+                let signalText = '中性';
+                let signalClass = 'bg-slate-100 text-slate-500';
+                
+                if (lastScore >= 0.9) {
+                    scoreClass = 'text-green-600';
+                    signalText = 'Long';
+                    signalClass = 'bg-green-100 text-green-600';
+                } else if (lastScore <= -0.9) {
+                    scoreClass = 'text-red-600';
+                    signalText = 'Short';
+                    signalClass = 'bg-red-100 text-red-600';
+                } else if (lastScore > 0.5) {
+                    scoreClass = 'text-green-500';
+                    signalText = '偏多';
+                    signalClass = 'bg-green-50 text-green-500';
+                } else if (lastScore < -0.5) {
+                    scoreClass = 'text-red-500';
+                    signalText = '偏空';
+                    signalClass = 'bg-red-50 text-red-500';
+                }
+                
+                document.getElementById('vwmaScore').textContent = scoreText;
+                document.getElementById('vwmaScore').className = `text-sm font-medium ${scoreClass}`;
+                document.getElementById('vwmaSignal').textContent = signalText;
+                document.getElementById('vwmaSignal').className = `text-xs px-1.5 py-0.5 rounded ${signalClass}`;
+            }
+            
+            // 综合判断
+            let overallDirection = '观望';
+            let overallStrength = 3;
+            
+            const vwmaScore = vwmaData && vwmaData.length > 0 ? vwmaData[vwmaData.length - 1].value : 0;
+            const masrTrendBullish = masrData && masrData.basis && candles[candles.length - 1].close > masrData.basis[masrData.basis.length - 1].value;
+            
+            if (vwmaScore >= 0.9 && masrTrendBullish) {
+                overallDirection = '🚀 强烈看多';
+                overallStrength = 5;
+            } else if (vwmaScore <= -0.9 && !masrTrendBullish) {
+                overallDirection = '💥 强烈看空';
+                overallStrength = 5;
+            } else if (vwmaScore > 0.5 && masrTrendBullish) {
+                overallDirection = '📈 偏多';
+                overallStrength = 4;
+            } else if (vwmaScore < -0.5 && !masrTrendBullish) {
+                overallDirection = '📉 偏空';
+                overallStrength = 4;
+            } else if (Math.abs(vwmaScore) < 0.3) {
+                overallDirection = '🔄 震荡';
+                overallStrength = 2;
+            }
+            
+            document.getElementById('overallDirection').textContent = overallDirection;
+            document.getElementById('overallStrength').textContent = '⭐'.repeat(overallStrength) + '☆'.repeat(5 - overallStrength);
+        }
+        
         function loadTokenChart(symbol) {
             currentChartSymbol = symbol;
             const container = document.getElementById('tokenChart');
@@ -3816,6 +4774,67 @@ HTML = '''<!DOCTYPE html>
                 scaleMargins: { top: 0.8, bottom: 0 },
             });
             
+            // 清空旧的均线系列
+            maSeries = {};
+            masrChannelSeries = {};
+            
+            // 创建均线系列
+            indicatorConfig.ma.forEach((cfg, idx) => {
+                if (cfg.enabled) {
+                    maSeries[`ma${idx}`] = chart.addLineSeries({
+                        color: cfg.color,
+                        lineWidth: cfg.width,
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                        crosshairMarkerVisible: false,
+                    });
+                }
+            });
+            
+            // 创建 MASR 通道系列
+            if (indicatorConfig.masr.enabled) {
+                // 内侧通道 - 支撑
+                masrChannelSeries.bottom = chart.addLineSeries({
+                    color: '#22c55e',
+                    lineWidth: 1,
+                    lineStyle: 0,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+                // 内侧通道 - 阻力
+                masrChannelSeries.top = chart.addLineSeries({
+                    color: '#ef4444',
+                    lineWidth: 1,
+                    lineStyle: 0,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+                // 外侧通道 - 支撑
+                masrChannelSeries.bottom1 = chart.addLineSeries({
+                    color: '#16a34a',
+                    lineWidth: 2,
+                    lineStyle: 0,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+                // 外侧通道 - 阻力
+                masrChannelSeries.top1 = chart.addLineSeries({
+                    color: '#dc2626',
+                    lineWidth: 2,
+                    lineStyle: 0,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+                // 中轨
+                masrChannelSeries.basis = chart.addLineSeries({
+                    color: '#eab308',
+                    lineWidth: 1.5,
+                    lineStyle: 0,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+            }
+            
             // 加载历史数据
             loadHistoricalKlines(symbol, currentChartInterval, currentChartExchange);
             
@@ -3854,6 +4873,70 @@ HTML = '''<!DOCTYPE html>
                 if (candleSeries && candles.length > 0) {
                     candleSeries.setData(candles);
                     volumeSeries.setData(volumes);
+                    
+                    // 计算和绘制均线
+                    indicatorConfig.ma.forEach((cfg, idx) => {
+                        if (cfg.enabled && maSeries[`ma${idx}`]) {
+                            let maData;
+                            if (cfg.type === 'SMA') {
+                                maData = calcSMA(candles, cfg.period);
+                            } else if (cfg.type === 'EMA') {
+                                maData = calcEMA(candles, cfg.period);
+                            }
+                            if (maData && maData.length > 0) {
+                                maSeries[`ma${idx}`].setData(maData);
+                            }
+                        }
+                    });
+                    
+                    // 计算和绘制 MASR 通道
+                    let masrData = null;
+                    if (indicatorConfig.masr.enabled) {
+                        masrData = calcMASR(candles, indicatorConfig.masr);
+                        if (masrData) {
+                            if (masrChannelSeries.bottom) masrChannelSeries.bottom.setData(masrData.bottom);
+                            if (masrChannelSeries.top) masrChannelSeries.top.setData(masrData.top);
+                            if (masrChannelSeries.bottom1) masrChannelSeries.bottom1.setData(masrData.bottom1);
+                            if (masrChannelSeries.top1) masrChannelSeries.top1.setData(masrData.top1);
+                            if (masrChannelSeries.basis) masrChannelSeries.basis.setData(masrData.basis);
+                        }
+                    }
+                    
+                    // 缓存 K 线数据并渲染副图
+                    cachedCandles = candles;
+                    renderSubChart(candles, currentSubChartType);
+                    
+                    // 检测并显示策略信号
+                    const allSignals = [];
+                    
+                    // MASR 信号
+                    if (masrData) {
+                        const masrSignals = detectMASRSignals(candles, masrData);
+                        allSignals.push(...masrSignals);
+                    }
+                    
+                    // VWMA 信号
+                    if (indicatorConfig.vwmaLyro.enabled) {
+                        const vwmaData = calcVWMALyroRS(candles, indicatorConfig.vwmaLyro);
+                        const vwmaSignals = detectVWMASignals(candles, vwmaData);
+                        allSignals.push(...vwmaSignals);
+                        
+                        // 融合信号
+                        if (masrData) {
+                            const masrSignals = detectMASRSignals(candles, masrData);
+                            const fusedSignals = fuseStrategySignals(masrSignals, vwmaSignals);
+                            allSignals.push(...fusedSignals);
+                        }
+                    }
+                    
+                    // 在 K 线图上显示信号
+                    if (allSignals.length > 0 && candleSeries) {
+                        candleSeries.setMarkers(allSignals);
+                    }
+                    
+                    // 更新策略信号面板
+                    updateStrategyPanel(candles, masrData);
+                    
                     chart.timeScale().fitContent();
                 }
                 
@@ -4088,6 +5171,185 @@ HTML = '''<!DOCTYPE html>
             }
         }
         
+        // 切换副图类型
+        function switchSubChart(type) {
+            currentSubChartType = type;
+            
+            // 更新按钮样式
+            ['rsi', 'macd', 'vwma'].forEach(t => {
+                const btn = document.getElementById('btn' + t.toUpperCase());
+                if (btn) {
+                    if (t === type) {
+                        btn.className = 'px-2 py-0.5 text-xs rounded bg-blue-500 text-white';
+                    } else {
+                        btn.className = 'px-2 py-0.5 text-xs rounded bg-slate-200 text-slate-600 hover:bg-slate-300';
+                    }
+                }
+            });
+            
+            // 重新绘制副图
+            if (cachedCandles.length > 0) {
+                renderSubChart(cachedCandles, type);
+            }
+        }
+        
+        // 渲染副图
+        function renderSubChart(candles, type) {
+            const container = document.getElementById('subChart');
+            if (!container) return;
+            
+            // 销毁旧图表
+            if (subChart) {
+                subChart.remove();
+                subChart = null;
+            }
+            
+            // 创建新的副图
+            subChart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: 70,
+                layout: {
+                    background: { type: 'solid', color: '#f8fafc' },
+                    textColor: '#64748b',
+                    fontSize: 10,
+                },
+                grid: {
+                    vertLines: { color: '#e2e8f0' },
+                    horzLines: { color: '#e2e8f0' },
+                },
+                timeScale: { visible: false },
+                rightPriceScale: { borderColor: '#e2e8f0' },
+                crosshair: { mode: 0 },
+            });
+            
+            if (type === 'rsi') {
+                // RSI
+                const rsiData = calcRSI(candles, 14);
+                subChartSeries = subChart.addLineSeries({
+                    color: '#8b5cf6',
+                    lineWidth: 1.5,
+                    priceLineVisible: false,
+                    lastValueVisible: true,
+                });
+                subChartSeries.setData(rsiData);
+                
+                // RSI 超买/超卖线
+                const timeRange = rsiData.map(d => d.time);
+                if (timeRange.length > 0) {
+                    // 70 线
+                    const overbought = subChart.addLineSeries({
+                        color: '#ef4444',
+                        lineWidth: 1,
+                        lineStyle: 2, // dashed
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                    overbought.setData(timeRange.map(t => ({ time: t, value: 70 })));
+                    
+                    // 30 线
+                    const oversold = subChart.addLineSeries({
+                        color: '#22c55e',
+                        lineWidth: 1,
+                        lineStyle: 2,
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                    oversold.setData(timeRange.map(t => ({ time: t, value: 30 })));
+                }
+                
+                // 更新显示值
+                const lastVal = rsiData[rsiData.length - 1]?.value?.toFixed(1) || '--';
+                document.getElementById('subChartValue').textContent = `RSI(14): ${lastVal}`;
+                
+            } else if (type === 'macd') {
+                // MACD
+                const macdData = calcMACD(candles, 12, 26, 9);
+                
+                // 柱状图
+                subChartSeries = subChart.addHistogramSeries({
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+                subChartSeries.setData(macdData.histogram);
+                
+                // MACD 线
+                const macdLine = subChart.addLineSeries({
+                    color: '#3b82f6',
+                    lineWidth: 1.5,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+                macdLine.setData(macdData.macd);
+                
+                // 信号线
+                const signalLine = subChart.addLineSeries({
+                    color: '#f59e0b',
+                    lineWidth: 1,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+                signalLine.setData(macdData.signal);
+                
+                // 更新显示值
+                const lastMacd = macdData.macd[macdData.macd.length - 1]?.value?.toFixed(4) || '--';
+                document.getElementById('subChartValue').textContent = `MACD: ${lastMacd}`;
+                
+            } else if (type === 'vwma') {
+                // VWMA Lyro RS 评分
+                const vwmaData = calcVWMALyroRS(candles, indicatorConfig.vwmaLyro);
+                
+                if (vwmaData && vwmaData.length > 0) {
+                    subChartSeries = subChart.addLineSeries({
+                        color: '#06b6d4',
+                        lineWidth: 2,
+                        priceLineVisible: false,
+                        lastValueVisible: true,
+                    });
+                    subChartSeries.setData(vwmaData);
+                    
+                    // 阈值线
+                    const timeRange = vwmaData.map(d => d.time);
+                    
+                    // +0.9 线
+                    const longThresh = subChart.addLineSeries({
+                        color: '#22c55e',
+                        lineWidth: 1,
+                        lineStyle: 2,
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                    longThresh.setData(timeRange.map(t => ({ time: t, value: 0.9 })));
+                    
+                    // -0.9 线
+                    const shortThresh = subChart.addLineSeries({
+                        color: '#ef4444',
+                        lineWidth: 1,
+                        lineStyle: 2,
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                    shortThresh.setData(timeRange.map(t => ({ time: t, value: -0.9 })));
+                    
+                    // 0 线
+                    const zeroLine = subChart.addLineSeries({
+                        color: '#94a3b8',
+                        lineWidth: 1,
+                        lineStyle: 1,
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                    zeroLine.setData(timeRange.map(t => ({ time: t, value: 0 })));
+                    
+                    // 更新显示值
+                    const lastVal = vwmaData[vwmaData.length - 1]?.value?.toFixed(2) || '--';
+                    const status = lastVal > 0.9 ? ' 📈' : (lastVal < -0.9 ? ' 📉' : '');
+                    document.getElementById('subChartValue').textContent = `VWMA Score: ${lastVal}${status}`;
+                }
+            }
+            
+            subChart.timeScale().fitContent();
+        }
+        
         function closeTokenDetail() {
             document.getElementById('tokenDetailModal').classList.add('hidden');
             document.getElementById('tokenDetailModal').classList.remove('flex');
@@ -4102,6 +5364,12 @@ HTML = '''<!DOCTYPE html>
             if (chart) {
                 chart.remove();
                 chart = null;
+            }
+            
+            // 销毁副图
+            if (subChart) {
+                subChart.remove();
+                subChart = null;
             }
             
             currentChartSymbol = '';
