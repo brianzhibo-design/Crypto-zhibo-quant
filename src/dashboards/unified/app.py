@@ -2475,9 +2475,9 @@ HTML = '''<!DOCTYPE html>
                     <div class="border-l border-slate-200 h-4 mx-1"></div>
                     <!-- 显示模式切换 -->
                     <div id="displayModeBtns" class="flex gap-1">
-                        <button onclick="switchDisplayMode('simple')" class="display-mode-btn text-xs px-2 py-1 rounded bg-emerald-500 text-white" title="只显示中轨+MA20+趋势信号">简洁</button>
-                        <button onclick="switchDisplayMode('standard')" class="display-mode-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200" title="显示内侧通道+回踩信号">标准</button>
-                        <button onclick="switchDisplayMode('full')" class="display-mode-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200" title="显示全部指标和信号">完整</button>
+                        <button onclick="switchDisplayMode('simple')" class="display-mode-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200" title="MA+布林带">简洁</button>
+                        <button onclick="switchDisplayMode('standard')" class="display-mode-btn text-xs px-2 py-1 rounded bg-emerald-500 text-white" title="MA+布林带+信号">标准</button>
+                        <button onclick="switchDisplayMode('full')" class="display-mode-btn text-xs px-2 py-1 rounded bg-slate-100 hover:bg-slate-200" title="全部指标+MASR通道">完整</button>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
@@ -2581,15 +2581,16 @@ HTML = '''<!DOCTYPE html>
                 </div>
             </div>
             
-            <!-- RSI/MACD 副图 -->
+            <!-- RSI/KDJ/MACD 副图 (OKX风格) -->
             <div class="bg-slate-50 rounded-xl p-2 mb-4 h-[100px] relative">
                 <div class="flex items-center justify-between mb-1">
-                    <div class="flex items-center gap-2">
-                        <button onclick="switchSubChart('rsi')" id="btnRSI" class="px-2 py-0.5 text-xs rounded bg-blue-500 text-white">RSI</button>
-                        <button onclick="switchSubChart('macd')" id="btnMACD" class="px-2 py-0.5 text-xs rounded bg-slate-200 text-slate-600 hover:bg-slate-300">MACD</button>
-                        <button onclick="switchSubChart('vwma')" id="btnVWMA" class="px-2 py-0.5 text-xs rounded bg-slate-200 text-slate-600 hover:bg-slate-300">VWMA</button>
+                    <div class="flex items-center gap-1">
+                        <button onclick="switchSubChart('rsi')" id="btnRSI" class="px-2 py-0.5 text-xs rounded bg-sky-500 text-white">RSI</button>
+                        <button onclick="switchSubChart('kdj')" id="btnKDJ" class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-600 hover:bg-slate-200">KDJ</button>
+                        <button onclick="switchSubChart('macd')" id="btnMACD" class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-600 hover:bg-slate-200">MACD</button>
+                        <button onclick="switchSubChart('vwma')" id="btnVWMA" class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-600 hover:bg-slate-200">VWMA</button>
                     </div>
-                    <span id="subChartValue" class="text-xs text-slate-500">RSI(14): --</span>
+                    <span id="subChartValue" class="text-xs text-slate-500 font-mono">RSI(6,12,24)</span>
                 </div>
                 <div id="subChart" class="w-full h-[70px]"></div>
             </div>
@@ -3926,6 +3927,7 @@ HTML = '''<!DOCTYPE html>
         // 均线系列
         let maSeries = {};
         let masrChannelSeries = {};
+        let bollSeries = {};  // 布林带系列
         
         // 副图相关变量
         let subChart = null;
@@ -3934,21 +3936,50 @@ HTML = '''<!DOCTYPE html>
         let cachedCandles = [];  // 缓存 K 线数据用于副图计算
         let klineData = [];
         
-        // 指标配置
+        // 指标配置 (参考OKX风格)
         let indicatorConfig = {
+            // 均线系统
             ma: [
-                { enabled: true, period: 20, type: 'EMA', color: '#f59e0b', width: 1.5 },
-                { enabled: false, period: 50, type: 'SMA', color: '#8b5cf680', width: 1 },  // 默认关闭，半透明
-                { enabled: false, period: 120, type: 'SMA', color: '#06b6d480', width: 1 },
-                { enabled: false, period: 200, type: 'SMA', color: '#ec489980', width: 1 },
+                { enabled: true, period: 7, type: 'SMA', color: '#2196f3', width: 1 },   // MA7 蓝色
+                { enabled: true, period: 25, type: 'SMA', color: '#e91e63', width: 1 },  // MA25 粉色
+                { enabled: true, period: 99, type: 'SMA', color: '#ff9800', width: 1 },  // MA99 黄色
+                { enabled: false, period: 200, type: 'SMA', color: '#9c27b0', width: 1 },
             ],
-            masr: {
+            // 布林带
+            boll: {
                 enabled: true,
+                period: 20,
+                stdDev: 2,
+                maColor: '#e91e63',      // 中轨粉色
+                upperColor: '#ff9800',   // 上轨黄色
+                lowerColor: '#2196f3',   // 下轨蓝色
+                fillColor: '#e91e6310',  // 填充色(透明)
+            },
+            // MASR 通道 (可选)
+            masr: {
+                enabled: false,
                 length: 120,
                 innerWidth: 1.9,
                 outerWidth: 8,
                 smoothing: 'SMA',
             },
+            // RSI 多周期
+            rsi: {
+                periods: [6, 12, 24],
+                colors: ['#ff9800', '#e91e63', '#2196f3'],  // 黄、粉、蓝
+                overbought: 70,
+                oversold: 30,
+            },
+            // KDJ 指标
+            kdj: {
+                period: 9,
+                kPeriod: 3,
+                dPeriod: 3,
+                kColor: '#ff9800',   // K线黄色
+                dColor: '#e91e63',   // D线粉色
+                jColor: '#00bcd4',   // J线青色
+            },
+            // VWMA Lyro (保留)
             vwmaLyro: {
                 enabled: false,
                 period: 65,
@@ -3958,25 +3989,25 @@ HTML = '''<!DOCTYPE html>
             }
         };
         
-        // ==================== 显示模式配置 ====================
+        // ==================== 显示模式配置 (OKX风格) ====================
         const DISPLAY_MODES = {
-            simple: {  // 简洁模式 - 默认
-                ma: { showCount: 1 },  // 只显示MA20
-                masr: { showMiddle: true, showInner: false, showOuter: false, showFill: false, bgOpacity: 0.03 },
-                signals: { showTrend: true, showPullback: false, showVWMA: true, showReverse: false }
+            simple: {  // 简洁模式
+                ma: { showCount: 3 },  // MA7, MA25, MA99
+                masr: { showMiddle: false, showInner: false, showOuter: false, showFill: false, bgOpacity: 0 },
+                signals: { showTrend: true, showPullback: false, showVWMA: false, showReverse: false }
             },
-            standard: {  // 标准模式
-                ma: { showCount: 2 },  // 显示MA20, MA50
-                masr: { showMiddle: true, showInner: true, showOuter: false, showFill: false, bgOpacity: 0.05 },
-                signals: { showTrend: true, showPullback: true, showVWMA: true, showReverse: true }
+            standard: {  // 标准模式 - 默认
+                ma: { showCount: 3 },  // MA7, MA25, MA99
+                masr: { showMiddle: false, showInner: false, showOuter: false, showFill: false, bgOpacity: 0 },
+                signals: { showTrend: true, showPullback: true, showVWMA: true, showReverse: false }
             },
             full: {  // 完整模式
-                ma: { showCount: 4 },  // 显示全部
-                masr: { showMiddle: true, showInner: true, showOuter: true, showFill: true, bgOpacity: 0.08 },
+                ma: { showCount: 4 },
+                masr: { showMiddle: true, showInner: true, showOuter: true, showFill: false, bgOpacity: 0.05 },
                 signals: { showTrend: true, showPullback: true, showVWMA: true, showReverse: true }
             }
         };
-        let currentDisplayMode = 'simple';  // 默认简洁模式
+        let currentDisplayMode = 'standard';  // 默认标准模式
         
         // 信号过滤配置
         const SIGNAL_FILTER = {
@@ -4240,6 +4271,81 @@ HTML = '''<!DOCTYPE html>
                 signal: signalLine,
                 histogram
             };
+        }
+        
+        // 布林带计算 (Bollinger Bands)
+        function calcBOLL(data, period = 20, stdDev = 2) {
+            const result = { middle: [], upper: [], lower: [] };
+            
+            for (let i = period - 1; i < data.length; i++) {
+                // 计算 SMA
+                let sum = 0;
+                for (let j = 0; j < period; j++) {
+                    sum += data[i - j].close;
+                }
+                const sma = sum / period;
+                
+                // 计算标准差
+                let sqSum = 0;
+                for (let j = 0; j < period; j++) {
+                    sqSum += Math.pow(data[i - j].close - sma, 2);
+                }
+                const std = Math.sqrt(sqSum / period);
+                
+                result.middle.push({ time: data[i].time, value: sma });
+                result.upper.push({ time: data[i].time, value: sma + stdDev * std });
+                result.lower.push({ time: data[i].time, value: sma - stdDev * std });
+            }
+            
+            return result;
+        }
+        
+        // KDJ 指标计算
+        function calcKDJ(data, period = 9, kPeriod = 3, dPeriod = 3) {
+            const result = { k: [], d: [], j: [] };
+            
+            if (data.length < period) return result;
+            
+            let prevK = 50, prevD = 50;  // 初始值
+            
+            for (let i = period - 1; i < data.length; i++) {
+                // 找出 period 周期内的最高价和最低价
+                let highest = data[i].high;
+                let lowest = data[i].low;
+                for (let j = 1; j < period; j++) {
+                    if (data[i - j].high > highest) highest = data[i - j].high;
+                    if (data[i - j].low < lowest) lowest = data[i - j].low;
+                }
+                
+                // RSV = (收盘价 - 最低价) / (最高价 - 最低价) * 100
+                const range = highest - lowest;
+                const rsv = range === 0 ? 50 : ((data[i].close - lowest) / range) * 100;
+                
+                // K = 前K * (kPeriod-1)/kPeriod + RSV / kPeriod
+                const k = (prevK * (kPeriod - 1) + rsv) / kPeriod;
+                // D = 前D * (dPeriod-1)/dPeriod + K / dPeriod
+                const d = (prevD * (dPeriod - 1) + k) / dPeriod;
+                // J = 3K - 2D
+                const j = 3 * k - 2 * d;
+                
+                result.k.push({ time: data[i].time, value: k });
+                result.d.push({ time: data[i].time, value: d });
+                result.j.push({ time: data[i].time, value: j });
+                
+                prevK = k;
+                prevD = d;
+            }
+            
+            return result;
+        }
+        
+        // 计算多周期 RSI
+        function calcMultiRSI(data, periods = [6, 12, 24]) {
+            const result = {};
+            for (const period of periods) {
+                result[`rsi${period}`] = calcRSI(data, period);
+            }
+            return result;
         }
         
         // MASR 通道策略计算 (MA + ATR 动态通道)
@@ -4887,6 +4993,7 @@ HTML = '''<!DOCTYPE html>
             // 清空旧的均线系列
             maSeries = {};
             masrChannelSeries = {};
+            bollSeries = {};
             
             // 获取当前显示模式配置
             const mode = DISPLAY_MODES[currentDisplayMode];
@@ -4896,13 +5003,39 @@ HTML = '''<!DOCTYPE html>
                 if (cfg.enabled && idx < mode.ma.showCount) {
                     maSeries[`ma${idx}`] = chart.addLineSeries({
                         color: cfg.color,
-                        lineWidth: idx === 0 ? cfg.width : 1,  // 主均线粗，辅助均线细
+                        lineWidth: cfg.width || 1,
                         priceLineVisible: false,
                         lastValueVisible: false,
                         crosshairMarkerVisible: false,
                     });
                 }
             });
+            
+            // 创建布林带系列 (OKX风格)
+            if (indicatorConfig.boll?.enabled) {
+                const bollCfg = indicatorConfig.boll;
+                // 上轨
+                bollSeries.upper = chart.addLineSeries({
+                    color: bollCfg.upperColor || '#ff9800',
+                    lineWidth: 1,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+                // 中轨
+                bollSeries.middle = chart.addLineSeries({
+                    color: bollCfg.maColor || '#e91e63',
+                    lineWidth: 1.5,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+                // 下轨
+                bollSeries.lower = chart.addLineSeries({
+                    color: bollCfg.lowerColor || '#2196f3',
+                    lineWidth: 1,
+                    priceLineVisible: false,
+                    lastValueVisible: false,
+                });
+            }
             
             // 创建 MASR 通道系列 (根据模式显示不同元素)
             if (indicatorConfig.masr.enabled) {
@@ -5016,6 +5149,17 @@ HTML = '''<!DOCTYPE html>
                             }
                         }
                     });
+                    
+                    // 计算和绘制布林带
+                    if (indicatorConfig.boll?.enabled) {
+                        const bollCfg = indicatorConfig.boll;
+                        const bollData = calcBOLL(candles, bollCfg.period || 20, bollCfg.stdDev || 2);
+                        if (bollData && bollData.middle.length > 0) {
+                            if (bollSeries.upper) bollSeries.upper.setData(bollData.upper);
+                            if (bollSeries.middle) bollSeries.middle.setData(bollData.middle);
+                            if (bollSeries.lower) bollSeries.lower.setData(bollData.lower);
+                        }
+                    }
                     
                     // 计算和绘制 MASR 通道
                     let masrData = null;
@@ -5337,13 +5481,13 @@ HTML = '''<!DOCTYPE html>
             currentSubChartType = type;
             
             // 更新按钮样式
-            ['rsi', 'macd', 'vwma'].forEach(t => {
+            ['rsi', 'kdj', 'macd', 'vwma'].forEach(t => {
                 const btn = document.getElementById('btn' + t.toUpperCase());
                 if (btn) {
                     if (t === type) {
-                        btn.className = 'px-2 py-0.5 text-xs rounded bg-blue-500 text-white';
+                        btn.className = 'px-2 py-0.5 text-xs rounded bg-sky-500 text-white';
                     } else {
-                        btn.className = 'px-2 py-0.5 text-xs rounded bg-slate-200 text-slate-600 hover:bg-slate-300';
+                        btn.className = 'px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-600 hover:bg-slate-200';
                     }
                 }
             });
@@ -5384,24 +5528,32 @@ HTML = '''<!DOCTYPE html>
             });
             
             if (type === 'rsi') {
-                // RSI
-                const rsiData = calcRSI(candles, 14);
-                subChartSeries = subChart.addLineSeries({
-                    color: '#8b5cf6',
-                    lineWidth: 1.5,
-                    priceLineVisible: false,
-                    lastValueVisible: true,
-                });
-                subChartSeries.setData(rsiData);
+                // 多周期 RSI (6, 12, 24)
+                const periods = indicatorConfig.rsi?.periods || [6, 12, 24];
+                const colors = indicatorConfig.rsi?.colors || ['#ff9800', '#e91e63', '#2196f3'];
+                const rsiResults = [];
                 
-                // RSI 超买/超卖线
-                const timeRange = rsiData.map(d => d.time);
+                periods.forEach((period, idx) => {
+                    const rsiData = calcRSI(candles, period);
+                    const series = subChart.addLineSeries({
+                        color: colors[idx] || '#8b5cf6',
+                        lineWidth: 1.5,
+                        priceLineVisible: false,
+                        lastValueVisible: idx === 0,
+                    });
+                    series.setData(rsiData);
+                    rsiResults.push({ period, data: rsiData });
+                });
+                
+                // 超买/超卖线 (70/30)
+                const firstRsi = rsiResults[0]?.data || [];
+                const timeRange = firstRsi.map(d => d.time);
                 if (timeRange.length > 0) {
                     // 70 线
                     const overbought = subChart.addLineSeries({
-                        color: '#ef4444',
+                        color: '#94a3b8',
                         lineWidth: 1,
-                        lineStyle: 2, // dashed
+                        lineStyle: 2,
                         priceLineVisible: false,
                         lastValueVisible: false,
                     });
@@ -5409,18 +5561,90 @@ HTML = '''<!DOCTYPE html>
                     
                     // 30 线
                     const oversold = subChart.addLineSeries({
-                        color: '#22c55e',
+                        color: '#94a3b8',
                         lineWidth: 1,
                         lineStyle: 2,
                         priceLineVisible: false,
                         lastValueVisible: false,
                     });
                     oversold.setData(timeRange.map(t => ({ time: t, value: 30 })));
+                    
+                    // 50 中轴线
+                    const middle = subChart.addLineSeries({
+                        color: '#cbd5e1',
+                        lineWidth: 1,
+                        lineStyle: 1,
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                    middle.setData(timeRange.map(t => ({ time: t, value: 50 })));
                 }
                 
                 // 更新显示值
-                const lastVal = rsiData[rsiData.length - 1]?.value?.toFixed(1) || '--';
-                document.getElementById('subChartValue').textContent = `RSI(14): ${lastVal}`;
+                const vals = rsiResults.map(r => {
+                    const last = r.data[r.data.length - 1]?.value?.toFixed(2) || '--';
+                    return `RSI${r.period}: ${last}`;
+                }).join('  ');
+                document.getElementById('subChartValue').innerHTML = 
+                    `<span class="text-amber-500">RSI6: ${rsiResults[0]?.data.slice(-1)[0]?.value?.toFixed(2) || '--'}</span>  ` +
+                    `<span class="text-pink-500">RSI12: ${rsiResults[1]?.data.slice(-1)[0]?.value?.toFixed(2) || '--'}</span>  ` +
+                    `<span class="text-blue-500">RSI24: ${rsiResults[2]?.data.slice(-1)[0]?.value?.toFixed(2) || '--'}</span>`;
+                
+            } else if (type === 'kdj') {
+                // KDJ 指标
+                const kdjConfig = indicatorConfig.kdj || {};
+                const kdjData = calcKDJ(candles, kdjConfig.period || 9, kdjConfig.kPeriod || 3, kdjConfig.dPeriod || 3);
+                
+                if (kdjData.k.length > 0) {
+                    // K 线
+                    const kLine = subChart.addLineSeries({
+                        color: kdjConfig.kColor || '#ff9800',
+                        lineWidth: 1.5,
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                    kLine.setData(kdjData.k);
+                    
+                    // D 线
+                    const dLine = subChart.addLineSeries({
+                        color: kdjConfig.dColor || '#e91e63',
+                        lineWidth: 1.5,
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                    dLine.setData(kdjData.d);
+                    
+                    // J 线
+                    const jLine = subChart.addLineSeries({
+                        color: kdjConfig.jColor || '#00bcd4',
+                        lineWidth: 1,
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                    });
+                    jLine.setData(kdjData.j);
+                    
+                    // 参考线 (20, 50, 80)
+                    const timeRange = kdjData.k.map(d => d.time);
+                    [20, 50, 80].forEach(level => {
+                        const line = subChart.addLineSeries({
+                            color: '#cbd5e1',
+                            lineWidth: 1,
+                            lineStyle: 2,
+                            priceLineVisible: false,
+                            lastValueVisible: false,
+                        });
+                        line.setData(timeRange.map(t => ({ time: t, value: level })));
+                    });
+                }
+                
+                // 更新显示值
+                const lastK = kdjData.k.slice(-1)[0]?.value?.toFixed(2) || '--';
+                const lastD = kdjData.d.slice(-1)[0]?.value?.toFixed(2) || '--';
+                const lastJ = kdjData.j.slice(-1)[0]?.value?.toFixed(2) || '--';
+                document.getElementById('subChartValue').innerHTML = 
+                    `<span class="text-amber-500">K: ${lastK}</span>  ` +
+                    `<span class="text-pink-500">D: ${lastD}</span>  ` +
+                    `<span class="text-cyan-500">J: ${lastJ}</span>`;
                 
             } else if (type === 'macd') {
                 // MACD
