@@ -85,9 +85,13 @@ def is_new_coin_listing(raw_text: str, symbol: str, exchange: str, redis_client)
     判断是否为真正的新币上市
     
     返回 True 的条件:
-    1. 包含高优先级新币关键词
+    1. 包含高优先级新币关键词（官方公告类）
     2. 不包含排除关键词
     3. 该代币在该交易所不存在其他交易对
+    
+    返回 False 的条件:
+    1. REST API 发现的交易对变化（除非代币完全是新的）
+    2. 合约/永续/杠杆等衍生品
     """
     if not raw_text:
         return False
@@ -98,25 +102,33 @@ def is_new_coin_listing(raw_text: str, symbol: str, exchange: str, redis_client)
     if any(kw in text_lower for kw in EXCLUDE_KEYWORDS):
         return False
     
-    # 第二层：检查是否包含高优先级新币关键词
+    # 第二层：检查是否包含高优先级新币关键词（官方公告）
     has_high_priority = any(kw in text_lower for kw in HIGH_PRIORITY_NEW_COIN)
     
-    # 第三层：如果只是"新交易对"，需要检查该代币是否已存在
-    has_new_pair_keyword = any(kw in text_lower for kw in NEW_PAIR_KEYWORDS)
+    # 第三层：检查是否是 REST API 发现的交易对（通常不是官方公告）
+    is_rest_api_detected = 'detected' in text_lower or 'rest_api' in text_lower
     
-    if has_new_pair_keyword and not has_high_priority:
-        # 检查该代币是否已在该交易所存在
+    # 如果是 REST API 发现的，需要检查代币是否真的是新的
+    if is_rest_api_detected or any(kw in text_lower for kw in NEW_PAIR_KEYWORDS):
         if redis_client and exchange and symbol:
             base_symbol = extract_base_symbol(symbol)
             existing_pairs = redis_client.smembers(f'known_pairs:{exchange.lower()}') or set()
             
+            # 检查该代币是否在该交易所已有其他交易对
             for pair in existing_pairs:
                 pair_base = extract_base_symbol(pair)
-                if pair_base == base_symbol:
-                    # 该代币已存在，这只是新交易对，不是新币
+                if pair_base == base_symbol and pair != symbol:
+                    # 该代币已存在其他交易对，这只是新交易对，不是新币
                     return False
+            
+            # 如果 known_pairs 中没有该代币的任何交易对，则是新币
+            has_any_pair = any(extract_base_symbol(p) == base_symbol for p in existing_pairs)
+            if not has_any_pair and base_symbol:
+                return True  # 真正的新币
+        
+        return False  # 默认不是新币
     
-    # 如果有高优先级关键词，认为是新币
+    # 如果有高优先级关键词（官方公告），认为是新币
     if has_high_priority:
         return True
     
@@ -302,18 +314,33 @@ def get_events():
             # 使用分类函数判断事件类型（传入 Redis 客户端检查已知币对）
             event_type, is_new_coin = classify_event_type(raw_text, symbols, exchange, r)
 
+            # 获取原始信号来源
+            source = data.get('source', '')
+            source_type = data.get('source_type', '')
+            
+            # 格式化信号来源显示
+            source_display = source or source_type or '-'
+            if '_market' in source_display:
+                source_display = source_display.replace('_market', ' REST API')
+            elif source_display == 'social_telegram':
+                source_display = 'Telegram'
+            elif source_display == 'kr_market':
+                source_display = '韩国交易所'
+            
             events.append({
                 'id': mid,
                 'symbol': symbols or '-',
                 'exchange': exchange or '-',
                 'text': raw_text[:150] if raw_text else '',
                 'ts': data.get('ts', data.get('detected_at', mid.split('-')[0])),
-                'source': data.get('source', '-'),
+                'source': source_display,  # 原始信号来源
+                'source_raw': source,  # 保留原始值
+                'source_type': source_type,
                 'score': data.get('score', '0'),
                 'source_count': data.get('source_count', '1'),
                 'is_super_event': data.get('is_super_event', '0'),
-                'contract_address': data.get('contract_address', ''),
-                'chain': data.get('chain', ''),
+                'contract_address': data.get('contract_address', '') or '',
+                'chain': data.get('chain', '') or 'unknown',
                 'event_type': event_type,
                 'is_new_coin': is_new_coin,  # 真正的新币上市
             })
@@ -585,7 +612,7 @@ def get_insight():
 3) 是否有值得关注的趋势"""
 
                 response = client.messages.create(
-                    model="claude-haiku-4-5-latest",
+                    model="claude-3-5-haiku-latest",
                     max_tokens=200,
                     messages=[
                         {"role": "user", "content": prompt}
@@ -1593,19 +1620,19 @@ HTML = '''<!DOCTYPE html>
             document.getElementById('detailExchange').textContent = e.exchange || '-';
             document.getElementById('detailScore').textContent = parseFloat(e.score || 0).toFixed(0);
             
-            // 显示事件类型
+            // 显示信号来源（原始来源）
+            document.getElementById('detailSource').textContent = e.source || e.source_raw || '-';
+            
+            // 显示事件类型（新币/新交易对/其他）
             const eventType = e.event_type || e.type || 'signal';
             const isNewCoin = e.is_new_coin === true || e.is_new_coin === 'true';
             
             if (isNewCoin) {
-                document.getElementById('detailSource').innerHTML = '<span class="text-emerald-600 font-bold">🚀 新币上市</span>';
-                document.getElementById('detailTokenType').textContent = '首次上线（高价值）';
+                document.getElementById('detailTokenType').innerHTML = '<span class="text-emerald-600 font-bold">🚀 新币上市（高价值）</span>';
             } else if (eventType === 'new_pair') {
-                document.getElementById('detailSource').innerHTML = '<span class="text-slate-500">新交易对</span>';
-                document.getElementById('detailTokenType').textContent = '代币已存在（低价值）';
+                document.getElementById('detailTokenType').innerHTML = '<span class="text-slate-500">新交易对（代币已存在）</span>';
             } else {
-                document.getElementById('detailSource').innerHTML = `<span>${typeMap[eventType] || '信号'}</span>`;
-                document.getElementById('detailTokenType').textContent = e.token_type || eventType;
+                document.getElementById('detailTokenType').textContent = typeMap[eventType] || eventType;
             }
             
             const isTradeable = e.is_tradeable === '1' || e.is_tradeable === true;
@@ -1614,8 +1641,26 @@ HTML = '''<!DOCTYPE html>
                 : '<span class="text-red-500">✗ 否</span>';
             
             document.getElementById('detailRawText').textContent = e.text || e.raw_text || '无内容';
-            document.getElementById('detailContract').textContent = e.contract_address || '-';
-            document.getElementById('detailChain').textContent = e.chain || 'Ethereum';
+            
+            // 合约地址显示
+            const contractEl = document.getElementById('detailContract');
+            if (e.contract_address && e.contract_address.length > 10) {
+                contractEl.textContent = e.contract_address;
+                contractEl.classList.remove('text-slate-400');
+                contractEl.classList.add('text-slate-600');
+            } else {
+                // 根据来源提示为什么没有合约地址
+                const sourceRaw = e.source_raw || e.source || '';
+                if (sourceRaw.includes('_market') || sourceRaw.includes('rest')) {
+                    contractEl.textContent = '暂无（CEX API 不提供合约地址）';
+                } else {
+                    contractEl.textContent = '暂无';
+                }
+                contractEl.classList.remove('text-slate-600');
+                contractEl.classList.add('text-slate-400');
+            }
+            
+            document.getElementById('detailChain').textContent = e.chain || 'unknown';
             
             // 评级徽章颜色
             const score = parseFloat(e.score || 0);
