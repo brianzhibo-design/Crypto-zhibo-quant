@@ -682,7 +682,7 @@ HTML = '''<!DOCTYPE html>
                 </button>
                 <div class="text-right hidden md:block">
                     <div id="currentTime" class="text-sm font-mono font-medium text-slate-600">--:--:--</div>
-                    <div class="text-[10px] text-slate-400">UTC</div>
+                    <div class="text-[10px] text-slate-400">北京时间 (UTC+8)</div>
                 </div>
             </div>
         </div>
@@ -980,10 +980,15 @@ HTML = '''<!DOCTYPE html>
         let currentStream = 'fused';
         let currentTab = 'signals';
 
-        // Update time
+        // Update time - 显示北京时间 (UTC+8)
         function updateTime() {
             const now = new Date();
-            document.getElementById('currentTime').textContent = now.toUTCString().split(' ')[4];
+            // 转换为北京时间 (UTC+8)
+            const beijingTime = new Date(now.getTime() + (8 * 60 * 60 * 1000) + (now.getTimezoneOffset() * 60 * 1000));
+            const hours = beijingTime.getHours().toString().padStart(2, '0');
+            const minutes = beijingTime.getMinutes().toString().padStart(2, '0');
+            const seconds = beijingTime.getSeconds().toString().padStart(2, '0');
+            document.getElementById('currentTime').textContent = `${hours}:${minutes}:${seconds}`;
         }
         setInterval(updateTime, 1000);
         updateTime();
@@ -1111,7 +1116,13 @@ HTML = '''<!DOCTYPE html>
                 let h = '';
                 for (let i = 0; i < events.length; i++) {
                     const e = events[i];
-                    const t = e.ts ? new Date(parseInt(e.ts)).toLocaleTimeString('zh-CN', {hour12: false, hour: '2-digit', minute: '2-digit'}) : '--:--';
+                    // 转换为北京时间 (UTC+8)
+                    let t = '--:--';
+                    if (e.ts) {
+                        const eventDate = new Date(parseInt(e.ts));
+                        const beijingDate = new Date(eventDate.getTime() + (8 * 60 * 60 * 1000) + (eventDate.getTimezoneOffset() * 60 * 1000));
+                        t = beijingDate.toLocaleTimeString('zh-CN', {hour12: false, hour: '2-digit', minute: '2-digit'});
+                    }
                     const score = parseFloat(e.score || 0);
                     
                     let typeClass = 'bg-slate-100 text-slate-500';
@@ -1188,7 +1199,13 @@ HTML = '''<!DOCTYPE html>
                 noTrades.classList.add('hidden');
                 let h = '';
                 for (const t of trades) {
-                    const time = t.timestamp ? new Date(parseInt(t.timestamp)).toLocaleTimeString('en-US', {hour12: false, hour: '2-digit', minute: '2-digit'}) : '--:--';
+                    // 转换为北京时间 (UTC+8)
+                    let time = '--:--';
+                    if (t.timestamp) {
+                        const tradeDate = new Date(parseInt(t.timestamp));
+                        const beijingDate = new Date(tradeDate.getTime() + (8 * 60 * 60 * 1000) + (tradeDate.getTimezoneOffset() * 60 * 1000));
+                        time = beijingDate.toLocaleTimeString('zh-CN', {hour12: false, hour: '2-digit', minute: '2-digit'});
+                    }
                     
                     const actionClass = t.action === 'buy' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600';
                     const statusClass = t.status === 'success' ? 'bg-emerald-100 text-emerald-600' : t.status === 'failed' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600';
