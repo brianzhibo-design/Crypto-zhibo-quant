@@ -21,7 +21,7 @@ import time
 import argparse
 from pathlib import Path
 from typing import Dict, Set, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import aiohttp
 
 # 添加项目根目录
@@ -134,7 +134,7 @@ async def search_dexscreener(session: aiohttp.ClientSession, symbol: str) -> Opt
                         'price_usd': pair.get('priceUsd', ''),
                         'dex': pair.get('dexId', ''),
                         'pair_address': pair.get('pairAddress', ''),
-                        'updated_at': datetime.utcnow().isoformat(),
+                        'updated_at': datetime.now(timezone.utc).isoformat(),
                     }
             
             return best_match

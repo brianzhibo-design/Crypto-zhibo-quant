@@ -908,7 +908,6 @@ def find_contract(symbol):
             # 存储到 Redis 缓存
             if r and best.get('contract_address'):
                 try:
-                    from datetime import datetime
                     r.hset(f'contracts:{base_symbol}', mapping={
                         'symbol': base_symbol,
                         'contract_address': best['contract_address'],
@@ -919,7 +918,7 @@ def find_contract(symbol):
                         'price_usd': best.get('price_usd', ''),
                         'dex': best.get('dex', ''),
                         'source': 'dexscreener',
-                        'updated_at': datetime.utcnow().isoformat(),
+                        'updated_at': datetime.now(timezone.utc).isoformat(),
                     })
                 except Exception as cache_err:
                     pass  # 缓存失败不影响返回结果
