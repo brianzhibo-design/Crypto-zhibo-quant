@@ -521,6 +521,161 @@ def get_pairs(exchange):
     })
 
 
+# 交易所权重配置
+EXCHANGE_WEIGHTS = {
+    'binance': {'tier': 'S', 'weight': 10, 'name': 'Binance'},
+    'coinbase': {'tier': 'S', 'weight': 9, 'name': 'Coinbase'},
+    'upbit': {'tier': 'A', 'weight': 8, 'name': 'Upbit'},
+    'okx': {'tier': 'A', 'weight': 7, 'name': 'OKX'},
+    'bybit': {'tier': 'A', 'weight': 6, 'name': 'Bybit'},
+    'kraken': {'tier': 'A', 'weight': 6, 'name': 'Kraken'},
+    'kucoin': {'tier': 'B', 'weight': 5, 'name': 'KuCoin'},
+    'gate': {'tier': 'B', 'weight': 4, 'name': 'Gate.io'},
+    'bitget': {'tier': 'B', 'weight': 4, 'name': 'Bitget'},
+    'htx': {'tier': 'B', 'weight': 3, 'name': 'HTX'},
+    'bithumb': {'tier': 'B', 'weight': 5, 'name': 'Bithumb'},
+    'coinone': {'tier': 'C', 'weight': 3, 'name': 'Coinone'},
+    'korbit': {'tier': 'C', 'weight': 2, 'name': 'Korbit'},
+    'gopax': {'tier': 'C', 'weight': 2, 'name': 'Gopax'},
+    'mexc': {'tier': 'C', 'weight': 1, 'name': 'MEXC'},
+}
+
+
+@app.route('/api/cross-exchange/<symbol>')
+def get_cross_exchange(symbol):
+    """
+    查询代币在多个交易所的分布
+    
+    返回：该代币在哪些交易所有交易对，合约地址等
+    """
+    r = get_redis()
+    if not r:
+        return jsonify({'error': 'Redis disconnected'}), 500
+    
+    symbol = symbol.upper()
+    
+    # 提取基础符号
+    for suffix in ['_USDT', '/USDT', '-USDT', 'USDT', '_USD', '/USD', '-USD', 'USD']:
+        if symbol.endswith(suffix):
+            symbol = symbol[:-len(suffix)]
+            break
+    
+    exchanges_found = []
+    all_pairs = []
+    
+    for exchange, info in EXCHANGE_WEIGHTS.items():
+        pairs = r.smembers(f'known_pairs:{exchange}') or set()
+        matching_pairs = [p for p in pairs if p.upper().startswith(symbol + '_') or 
+                         p.upper().startswith(symbol + '/') or
+                         p.upper().startswith(symbol + '-') or
+                         p.upper() == symbol + 'USDT' or
+                         p.upper() == symbol + 'USD' or
+                         p.upper() == symbol + 'BTC' or
+                         p.upper() == symbol + 'ETH']
+        
+        if matching_pairs:
+            exchanges_found.append({
+                'exchange': exchange,
+                'name': info['name'],
+                'tier': info['tier'],
+                'weight': info['weight'],
+                'pairs': list(matching_pairs)[:5],
+                'pair_count': len(matching_pairs)
+            })
+            all_pairs.extend(matching_pairs)
+    
+    # 按权重排序
+    exchanges_found.sort(key=lambda x: -x['weight'])
+    
+    # 获取合约地址
+    contract_data = r.hgetall(f'contracts:{symbol}') or {}
+    
+    # 计算总权重分
+    weight_score = sum(ex['weight'] for ex in exchanges_found)
+    tier_s = [ex for ex in exchanges_found if ex['tier'] == 'S']
+    tier_a = [ex for ex in exchanges_found if ex['tier'] == 'A']
+    
+    return jsonify({
+        'symbol': symbol,
+        'exchange_count': len(exchanges_found),
+        'weight_score': weight_score,
+        'tier_s_count': len(tier_s),
+        'tier_a_count': len(tier_a),
+        'exchanges': exchanges_found,
+        'contract_address': contract_data.get('contract_address', ''),
+        'chain': contract_data.get('chain', ''),
+        'liquidity_usd': contract_data.get('liquidity_usd', ''),
+        'total_pairs': len(set(all_pairs))
+    })
+
+
+@app.route('/api/hot-tokens')
+def get_hot_tokens():
+    """
+    获取多交易所上线的热门代币
+    
+    按权重分排序，返回最热门的代币列表
+    """
+    r = get_redis()
+    if not r:
+        return jsonify({'error': 'Redis disconnected'}), 500
+    
+    min_exchanges = int(request.args.get('min', 2))
+    limit = int(request.args.get('limit', 50))
+    
+    # 收集所有交易对
+    from collections import defaultdict
+    symbol_exchanges = defaultdict(lambda: {'exchanges': set(), 'pairs': []})
+    
+    excluded = {'USDT', 'USDC', 'BUSD', 'DAI', 'USD', 'EUR', 'KRW', 'WETH', 'WBTC'}
+    
+    for exchange in EXCHANGE_WEIGHTS.keys():
+        pairs = r.smembers(f'known_pairs:{exchange}') or set()
+        for pair in pairs:
+            # 提取基础符号
+            base = pair.upper()
+            for sep in ['_', '/', '-']:
+                if sep in base:
+                    base = base.split(sep)[0]
+                    break
+            for suffix in ['USDT', 'USDC', 'USD', 'BTC', 'ETH', 'KRW']:
+                if base.endswith(suffix) and len(base) > len(suffix):
+                    base = base[:-len(suffix)]
+                    break
+            
+            if base and base not in excluded and len(base) >= 2:
+                symbol_exchanges[base]['exchanges'].add(exchange)
+                symbol_exchanges[base]['pairs'].append(pair)
+    
+    # 筛选多交易所代币
+    hot_tokens = []
+    for symbol, data in symbol_exchanges.items():
+        exchange_count = len(data['exchanges'])
+        if exchange_count >= min_exchanges:
+            weight_score = sum(EXCHANGE_WEIGHTS.get(ex, {}).get('weight', 0) for ex in data['exchanges'])
+            
+            # 获取合约地址
+            contract = r.hgetall(f'contracts:{symbol}') or {}
+            
+            hot_tokens.append({
+                'symbol': symbol,
+                'exchange_count': exchange_count,
+                'weight_score': weight_score,
+                'exchanges': sorted(data['exchanges'], key=lambda x: -EXCHANGE_WEIGHTS.get(x, {}).get('weight', 0)),
+                'contract_address': contract.get('contract_address', ''),
+                'chain': contract.get('chain', ''),
+            })
+    
+    # 按权重排序
+    hot_tokens.sort(key=lambda x: (-x['weight_score'], -x['exchange_count']))
+    
+    return jsonify({
+        'total': len(hot_tokens),
+        'min_exchanges': min_exchanges,
+        'tokens': hot_tokens[:limit]
+    })
+
+
 @app.route('/api/search')
 def search():
     r = get_redis()
