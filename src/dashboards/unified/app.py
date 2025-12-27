@@ -1527,7 +1527,11 @@ HTML = '''<!DOCTYPE html>
                 </button>
             </div>
             
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+                <div class="bg-slate-50 rounded-xl p-3">
+                    <div class="text-xs text-slate-400 mb-1">时间</div>
+                    <div id="detailTime" class="font-mono font-bold text-lg text-slate-700">--:--:--</div>
+                </div>
                 <div class="bg-slate-50 rounded-xl p-3">
                     <div class="text-xs text-slate-400 mb-1">评分</div>
                     <div id="detailScore" class="font-bold text-lg text-slate-700">85</div>
@@ -1743,7 +1747,7 @@ HTML = '''<!DOCTYPE html>
                     if (e.ts) {
                         const eventDate = new Date(parseInt(e.ts));
                         const beijingDate = new Date(eventDate.getTime() + (8 * 60 * 60 * 1000) + (eventDate.getTimezoneOffset() * 60 * 1000));
-                        t = beijingDate.toLocaleTimeString('zh-CN', {hour12: false, hour: '2-digit', minute: '2-digit'});
+                        t = beijingDate.toLocaleTimeString('zh-CN', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'});
                     }
                     const score = parseFloat(e.score || 0);
                     
@@ -1843,7 +1847,7 @@ HTML = '''<!DOCTYPE html>
                     if (t.timestamp) {
                         const tradeDate = new Date(parseInt(t.timestamp));
                         const beijingDate = new Date(tradeDate.getTime() + (8 * 60 * 60 * 1000) + (tradeDate.getTimezoneOffset() * 60 * 1000));
-                        time = beijingDate.toLocaleTimeString('zh-CN', {hour12: false, hour: '2-digit', minute: '2-digit'});
+                        time = beijingDate.toLocaleTimeString('zh-CN', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'});
                     }
                     
                     const actionClass = t.action === 'buy' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600';
@@ -2115,6 +2119,15 @@ HTML = '''<!DOCTYPE html>
             document.getElementById('detailSymbol').textContent = e.symbol || '-';
             document.getElementById('detailExchange').textContent = e.exchange || '-';
             document.getElementById('detailScore').textContent = parseFloat(e.score || 0).toFixed(0);
+            
+            // 显示时间（精确到秒）
+            let timeStr = '--:--:--';
+            if (e.ts) {
+                const eventDate = new Date(parseInt(e.ts));
+                const beijingDate = new Date(eventDate.getTime() + (8 * 60 * 60 * 1000) + (eventDate.getTimezoneOffset() * 60 * 1000));
+                timeStr = beijingDate.toLocaleTimeString('zh-CN', {hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'});
+            }
+            document.getElementById('detailTime').textContent = timeStr;
             
             // 显示信号来源（原始来源）
             document.getElementById('detailSource').textContent = e.source || e.source_raw || '-';
