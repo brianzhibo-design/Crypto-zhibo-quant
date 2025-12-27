@@ -68,11 +68,15 @@ class EtherscanFetcher:
                         return data.get('result', [])
                     else:
                         msg = data.get('message', 'Unknown error')
+                        result = data.get('result', '')
                         if 'Max rate limit reached' in msg:
                             logger.warning("Etherscan API 限速，等待5秒")
                             await asyncio.sleep(5)
                             return await self._make_request(params)  # 重试
-                        logger.warning(f"Etherscan API error: {msg}")
+                        if 'Invalid API Key' in str(result) or 'Invalid API' in msg:
+                            logger.error(f"Etherscan API Key 无效! 请检查配置。result={result}")
+                        else:
+                            logger.warning(f"Etherscan API error: {msg}, result={result}")
                         return None
                 else:
                     logger.error(f"HTTP error: {resp.status}")
