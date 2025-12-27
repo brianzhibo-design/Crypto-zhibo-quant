@@ -255,9 +255,49 @@ class ContractFinder:
                 if not pairs:
                     return result
                 
-                # 按流动性排序，取最高的
-                pairs.sort(key=lambda x: float(x.get('liquidity', {}).get('usd', 0) or 0), reverse=True)
-                best_pair = pairs[0]
+                # 清理搜索符号（去除 _USDT 等后缀）
+                search_symbol = symbol.upper().split('_')[0].split('/')[0].split('-')[0]
+                
+                # 优先匹配精确符号的交易对
+                exact_matches = []
+                partial_matches = []
+                
+                for pair in pairs:
+                    base_token = pair.get('baseToken', {})
+                    base_symbol = (base_token.get('symbol', '') or '').upper()
+                    quote_token = pair.get('quoteToken', {})
+                    quote_symbol = (quote_token.get('symbol', '') or '').upper()
+                    
+                    liquidity = float(pair.get('liquidity', {}).get('usd', 0) or 0)
+                    
+                    # 精确匹配 baseToken.symbol
+                    if base_symbol == search_symbol:
+                        exact_matches.append((pair, liquidity, 'base'))
+                    # 也检查 quoteToken（某些 DEX 可能颠倒）
+                    elif quote_symbol == search_symbol:
+                        exact_matches.append((pair, liquidity, 'quote'))
+                    # 部分匹配（包含关系）
+                    elif search_symbol in base_symbol or base_symbol in search_symbol:
+                        partial_matches.append((pair, liquidity, 'partial'))
+                
+                # 优先使用精确匹配
+                if exact_matches:
+                    # 按流动性排序
+                    exact_matches.sort(key=lambda x: x[1], reverse=True)
+                    best_pair, _, match_type = exact_matches[0]
+                    result['confidence'] = 0.95 if match_type == 'base' else 0.85
+                elif partial_matches:
+                    # 使用部分匹配，但降低置信度
+                    partial_matches.sort(key=lambda x: x[1], reverse=True)
+                    best_pair, _, _ = partial_matches[0]
+                    result['confidence'] = 0.6
+                    logger.warning(f"⚠️ DexScreener {symbol}: 无精确匹配，使用部分匹配 "
+                                   f"({best_pair.get('baseToken', {}).get('symbol', 'N/A')})")
+                else:
+                    # 无匹配
+                    logger.warning(f"❌ DexScreener 找到 {len(pairs)} 个 pairs 但无匹配 {search_symbol}")
+                    logger.debug(f"   返回的符号: {[p.get('baseToken', {}).get('symbol', 'N/A') for p in pairs[:5]]}")
+                    return result
                 
                 # 提取信息
                 base_token = best_pair.get('baseToken', {})
@@ -267,10 +307,9 @@ class ContractFinder:
                 result['liquidity_usd'] = float(best_pair.get('liquidity', {}).get('usd', 0) or 0)
                 result['price_usd'] = float(best_pair.get('priceUsd', 0) or 0)
                 result['dex'] = best_pair.get('dexId')
-                result['confidence'] = 0.85
                 
                 logger.info(f"🔍 DexScreener 找到 {symbol}: {result['contract_address'][:10]}... "
-                           f"(流动性: ${result['liquidity_usd']:,.0f})")
+                           f"(流动性: ${result['liquidity_usd']:,.0f}, 置信度: {result['confidence']:.0%})")
                 
         except asyncio.TimeoutError:
             logger.warning("DexScreener 请求超时")
