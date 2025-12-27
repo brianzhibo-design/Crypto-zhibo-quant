@@ -514,6 +514,7 @@ class WhaleMonitor:
 # ==================== 服务启动 ====================
 if __name__ == '__main__':
     import sys
+    import redis
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     
     logging.basicConfig(
@@ -523,8 +524,27 @@ if __name__ == '__main__':
     
     logger.info("=== 巨鲸/聪明钱监控服务启动 ===")
     
+    # 创建 Redis 客户端
+    redis_host = os.getenv('REDIS_HOST', '127.0.0.1')
+    redis_port = int(os.getenv('REDIS_PORT', 6379))
+    redis_password = os.getenv('REDIS_PASSWORD', '')
+    
+    try:
+        redis_client = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            password=redis_password,
+            decode_responses=True,
+            socket_timeout=10
+        )
+        redis_client.ping()
+        logger.info(f"✅ Redis 连接成功: {redis_host}:{redis_port}")
+    except Exception as e:
+        logger.error(f"❌ Redis 连接失败: {e}")
+        sys.exit(1)
+    
     # 创建并启动监控器
-    monitor = WhaleMonitor()
+    monitor = WhaleMonitor(redis_client=redis_client)
     
     try:
         asyncio.run(monitor.start())
