@@ -59,7 +59,7 @@ ALPHA_TELEGRAM_CHANNELS = {
     '方程式': 'tg_alpha_intel', 'bwe': 'tg_alpha_intel', 'bwenews': 'tg_alpha_intel',
     'tier2': 'tg_alpha_intel', 'tier3': 'tg_alpha_intel',
     'oi&price': 'tg_alpha_intel', 'oi_price': 'tg_alpha_intel', '抓庄': 'tg_alpha_intel',
-    'alpha': 'tg_alpha_intel', 'aster': 'tg_alpha_intel', 'moonshot': 'tg_alpha_intel',
+    'aster': 'tg_alpha_intel', 'moonshot': 'tg_alpha_intel',
     '二线交易所': 'tg_alpha_intel', '三线交易所': 'tg_alpha_intel',
     '价格异动': 'tg_alpha_intel', '理财提醒': 'tg_alpha_intel',
     # 新闻媒体 - 高优先级
@@ -69,9 +69,17 @@ ALPHA_TELEGRAM_CHANNELS = {
     # 原有配置
     'formula_news': 'tg_alpha_intel', 'formulanews': 'tg_alpha_intel',
     'listing_sniper': 'tg_alpha_intel', 'listingalpha': 'tg_alpha_intel',
+    # Binance Alpha 上币 (非官方正式上币，但仍有价值)
+    'binance alpha': 'tg_alpha_intel', 'binancealpha': 'tg_alpha_intel',
+    'alpha listing': 'tg_alpha_intel', 'alphalisting': 'tg_alpha_intel',
+    # 交易所官方
     'binance_announcements': 'tg_exchange_official', 'binanceexchange': 'tg_exchange_official',
-    'okxannouncements': 'tg_exchange_official', 'bybit_announcements': 'tg_exchange_official',
-    'gateio_announcements': 'tg_exchange_official', 'kucoin_news': 'tg_exchange_official',
+    'binance announcements': 'tg_exchange_official',
+    'okxannouncements': 'tg_exchange_official', 'okx announcements': 'tg_exchange_official',
+    'bybit_announcements': 'tg_exchange_official', 'bybit announcements': 'tg_exchange_official',
+    'gateio_announcements': 'tg_exchange_official', 'gate announcements': 'tg_exchange_official',
+    'kucoin_news': 'tg_exchange_official', 'kucoin announcements': 'tg_exchange_official',
+    'upbit': 'tg_exchange_official', 'upbit announcements': 'tg_exchange_official',
 }
 
 ALPHA_TWITTER_ACCOUNTS = {
@@ -132,18 +140,49 @@ class InstitutionalScorer:
         exchange = (event.get('exchange', '') or '').lower()
         account = (event.get('account', '') or '').lower()
         channel = (event.get('channel', '') or event.get('channel_id', '') or '').lower()
+        raw_text = (event.get('raw_text', '') or event.get('text', '') or '').lower()
         
+        # 检查 Telegram 频道名称
         if raw_source in ('social_telegram', 'telegram'):
             for key, val in ALPHA_TELEGRAM_CHANNELS.items():
-                if key in channel: return val
+                if key in channel: 
+                    return val
+            # 也检查消息内容中的关键词
+            for key, val in ALPHA_TELEGRAM_CHANNELS.items():
+                if key in raw_text:
+                    return val
+        
+        # 检查 Twitter 账号
         if raw_source in ('social_twitter', 'twitter'):
             for key, val in ALPHA_TWITTER_ACCOUNTS.items():
-                if key in account: return val
+                if key in account: 
+                    return val
+        
+        # 检查消息内容中的交易所上币关键词
+        if raw_text:
+            # Binance Alpha 上币
+            if 'binance alpha' in raw_text and ('list' in raw_text or 'token' in raw_text):
+                return 'tg_alpha_intel'
+            # 交易所官方上币公告
+            listing_keywords = ['will list', 'new listing', 'to list', 'lists new', 'listing announcement']
+            exchange_keywords = ['binance', 'okx', 'bybit', 'coinbase', 'upbit', 'gate', 'kucoin']
+            for listing_kw in listing_keywords:
+                if listing_kw in raw_text:
+                    for ex_kw in exchange_keywords:
+                        if ex_kw in raw_text:
+                            return 'tg_exchange_official'
+        
+        # REST API 分级
         if raw_source == 'rest_api':
-            if exchange in ('binance', 'okx', 'coinbase'): return 'rest_api_tier1'
-            elif exchange in ('bybit', 'upbit', 'gate', 'kraken'): return 'rest_api_tier2'
+            if exchange in ('binance', 'okx', 'coinbase'): 
+                return 'rest_api_tier1'
+            elif exchange in ('bybit', 'upbit', 'gate', 'kraken'): 
+                return 'rest_api_tier2'
+        
+        # 韩国市场
         if raw_source == 'kr_market' or exchange in ('upbit', 'bithumb', 'coinone', 'korbit', 'gopax'):
             return 'kr_market'
+        
         return raw_source
     
     def get_freshness_multiplier(self, symbol: str, current_time: float) -> Tuple[float, bool]:
