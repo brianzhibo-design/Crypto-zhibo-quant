@@ -3877,10 +3877,13 @@ HTML = '''<!DOCTYPE html>
         function formatPrice(price) {
             if (!price || price === 0) return '--';
             price = parseFloat(price);
-            if (price >= 1000) return '$' + price.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-            if (price >= 1) return '$' + price.toFixed(2);
-            if (price >= 0.0001) return '$' + price.toFixed(4);
-            return '$' + price.toFixed(8);
+            const precision = getPricePrecision(price);
+            const formatted = price.toFixed(precision);
+            // 对于高价币添加千分位分隔符
+            if (price >= 1000) {
+                return '$' + formatted.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            }
+            return '$' + formatted;
         }
         
         function formatVolume(vol) {
@@ -3890,6 +3893,25 @@ HTML = '''<!DOCTYPE html>
             if (vol >= 1e6) return '$' + (vol/1e6).toFixed(2) + 'M';
             if (vol >= 1e3) return '$' + (vol/1e3).toFixed(2) + 'K';
             return '$' + vol.toFixed(2);
+        }
+        
+        // 根据价格动态计算合适的小数精度
+        function getPricePrecision(price) {
+            if (!price || price === 0) return 2;
+            price = Math.abs(parseFloat(price));
+            
+            // 高价币 (BTC, ETH 等)
+            if (price >= 10000) return 2;    // BTC: $95000.00
+            if (price >= 1000) return 2;     // ETH: $3500.00
+            if (price >= 100) return 3;      // SOL: $185.123
+            if (price >= 10) return 4;       // LINK: $15.1234
+            if (price >= 1) return 4;        // DOGE: $0.3456
+            if (price >= 0.1) return 5;      // $0.12345
+            if (price >= 0.01) return 6;     // $0.012345
+            if (price >= 0.001) return 7;    // $0.0012345
+            if (price >= 0.0001) return 8;   // SHIB 级别
+            if (price >= 0.00001) return 9;  // 更低价币
+            return 10;                       // 超低价币 (PEPE 等)
         }
         
         // ==================== 图表相关变量 ====================
@@ -4966,6 +4988,17 @@ HTML = '''<!DOCTYPE html>
                 const { candles, volumes } = formatFn(data);
                 
                 if (candleSeries && candles.length > 0) {
+                    // 根据真实价格动态设置精度
+                    const lastPrice = candles[candles.length - 1].close;
+                    const precision = getPricePrecision(lastPrice);
+                    candleSeries.applyOptions({
+                        priceFormat: {
+                            type: 'price',
+                            precision: precision,
+                            minMove: Math.pow(10, -precision),
+                        }
+                    });
+                    
                     candleSeries.setData(candles);
                     volumeSeries.setData(volumes);
                     
