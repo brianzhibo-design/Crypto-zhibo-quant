@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Telegram Monitor
-================
+Telegram Monitor v2.0 (优化版)
+==============================
 Telegram 频道实时监控
-- 使用 Telethon 订阅 Telegram updates 流
-- 300ms-700ms 延迟
-- 支持 120+ 频道同时监控
+- 频道分级处理（Tier 1/2/3）
+- 快速预过滤（毫秒级判断）
+- 详细延迟追踪
 """
 
 import asyncio
@@ -14,6 +14,7 @@ import time
 import sys
 import os
 from pathlib import Path
+from collections import deque
 
 # 加载 .env 文件
 from dotenv import load_dotenv
@@ -26,6 +27,20 @@ from core.redis_client import RedisClient
 from core.symbols import extract_symbols
 from core.utils import extract_contract_address
 
+# 导入优化配置
+try:
+    sys.path.insert(0, str(project_root / 'config'))
+    from optimization_config import (
+        TELEGRAM_CHANNEL_PRIORITY,
+        QUICK_FILTER_KEYWORDS,
+        TELEGRAM_PREPROCESSING,
+    )
+except ImportError:
+    # 降级默认值
+    TELEGRAM_CHANNEL_PRIORITY = {'tier_1': [], 'tier_2': [], 'tier_3': []}
+    QUICK_FILTER_KEYWORDS = {'list', 'listing', '上线', '上币', 'new'}
+    TELEGRAM_PREPROCESSING = {'skip_media_only': True, 'min_text_length': 10}
+
 try:
     import yaml
     HAS_YAML = True
@@ -36,6 +51,14 @@ from telethon import TelegramClient, events
 from telethon.tl.types import InputPeerChannel
 
 logger = get_logger('telegram')
+
+# 延迟统计（用于监控）
+latency_stats = {
+    'samples': deque(maxlen=100),  # 最近 100 条消息延迟
+    'high_latency_count': 0,        # 高延迟计数（>30s）
+    'avg_telegram_delay': 0.0,
+    'avg_process_delay': 0.0,
+}
 
 # 心跳键名
 HEARTBEAT_KEY = 'telegram'
@@ -155,41 +178,131 @@ keywords = all_keywords_high + all_keywords_medium
 
 client = TelegramClient(session_name, api_id, api_hash)
 
-stats = {'messages': 0, 'events': 0, 'errors': 0}
+stats = {'messages': 0, 'events': 0, 'errors': 0, 'filtered': 0, 'tier1': 0, 'tier2': 0, 'tier3': 0}
 channels = []
+
+# ============================================================
+# 优化函数
+# ============================================================
+
+def get_channel_tier(channel_id: int, username: str = '', title: str = '') -> int:
+    """
+    获取频道优先级层级
+    返回: 1（最高）, 2（高）, 3（普通）
+    """
+    # 检查 channel_info 中的已知分类
+    info = channel_info.get(channel_id, {})
+    category = info.get('category', '').lower()
+    
+    # 基于分类判断
+    if category in ['alpha', 'intel', 'insider']:
+        return 1
+    
+    # 基于频道名关键词判断
+    search_text = f"{username} {title}".lower()
+    
+    for tier, keywords in [
+        (1, TELEGRAM_CHANNEL_PRIORITY.get('tier_1', [])),
+        (2, TELEGRAM_CHANNEL_PRIORITY.get('tier_2', [])),
+        (3, TELEGRAM_CHANNEL_PRIORITY.get('tier_3', [])),
+    ]:
+        for kw in keywords:
+            if kw.lower() in search_text:
+                return tier
+    
+    # 交易所官方频道默认 Tier 2
+    if category in ['exchange', 'exchange_kr']:
+        return 2
+    
+    return 3  # 默认 Tier 3
+
+
+def quick_prefilter(text: str, is_exchange_channel: bool = False) -> bool:
+    """
+    快速预过滤 - 毫秒级判断
+    返回 True 表示需要进一步处理
+    """
+    if not text:
+        return False
+    
+    # 太短的消息跳过
+    min_len = TELEGRAM_PREPROCESSING.get('min_text_length', 10)
+    if len(text) < min_len:
+        return False
+    
+    # 交易所官方频道：长消息直接通过
+    if is_exchange_channel and len(text) > 100:
+        return True
+    
+    # 快速关键词检查（不用正则，纯字符串包含）
+    text_lower = text.lower()
+    
+    for kw in QUICK_FILTER_KEYWORDS:
+        if kw in text_lower:
+            return True
+    
+    return False
+
+
+def update_latency_stats(telegram_delay: float, process_delay: float):
+    """更新延迟统计"""
+    latency_stats['samples'].append({
+        'telegram': telegram_delay,
+        'process': process_delay,
+        'ts': time.time(),
+    })
+    
+    if telegram_delay > 30:
+        latency_stats['high_latency_count'] += 1
+    
+    # 计算平均值
+    if latency_stats['samples']:
+        latency_stats['avg_telegram_delay'] = sum(s['telegram'] for s in latency_stats['samples']) / len(latency_stats['samples'])
+        latency_stats['avg_process_delay'] = sum(s['process'] for s in latency_stats['samples']) / len(latency_stats['samples'])
 
 
 async def message_handler(event):
-    """处理新消息 - 高速版（优化延迟）"""
-    # 立即记录接收时间
+    """处理新消息 - 优化版 v2.0"""
+    # 立即记录接收时间（毫秒精度）
     receive_time = time.time()
     
     try:
         stats['messages'] += 1
         
         text = event.message.raw_text or ""
-        if not text or len(text) < 10:  # 忽略太短的消息
-            return
         
         # 优化：使用消息的 peer_id 获取 chat_id（避免额外 API 调用）
         chat_id = event.chat_id or (event.message.peer_id.channel_id if hasattr(event.message.peer_id, 'channel_id') else None)
         
-        # 从缓存获取频道名，避免阻塞
+        # 从缓存获取频道信息
         if chat_id and chat_id in channel_info:
-            chat_name = channel_info[chat_id].get('title', str(chat_id))
+            info = channel_info[chat_id]
+            chat_name = info.get('title', str(chat_id))
+            username = info.get('username', '')
         else:
             # 只有在缓存中没有时才调用 get_chat
             chat = await event.get_chat()
             chat_id = chat.id
             chat_name = getattr(chat, 'title', str(chat_id))
-            # 缓存频道名
+            username = getattr(chat, 'username', '')
+            # 缓存频道信息
             if chat_id:
                 channel_info[chat_id] = channel_info.get(chat_id, {})
                 channel_info[chat_id]['title'] = chat_name
+                channel_info[chat_id]['username'] = username
+            info = channel_info.get(chat_id, {})
         
-        info = channel_info.get(chat_id, {})
         category = info.get('category', 'unknown')
-        priority = info.get('priority', 2)
+        is_exchange_channel = category in ['exchange', 'exchange_kr']
+        
+        # === 快速预过滤（毫秒级判断）===
+        if not quick_prefilter(text, is_exchange_channel):
+            stats['filtered'] += 1
+            return
+        
+        # === 获取频道优先级层级 ===
+        channel_tier = get_channel_tier(chat_id, username, chat_name)
+        stats[f'tier{channel_tier}'] = stats.get(f'tier{channel_tier}', 0) + 1
         
         lowered = text.lower()
         
@@ -237,31 +350,40 @@ async def message_handler(event):
             process_delay = push_time - receive_time  # 本地处理延迟
             total_delay = push_time - msg_time  # 总延迟
             
+            # 更新延迟统计
+            update_latency_stats(telegram_delay, process_delay)
+            
             event_data = {
                 'source': 'social_telegram',
                 'source_type': 'telegram',
                 'channel': chat_name,
                 'channel_id': str(chat_id),
                 'category': category,
-                'text': text[:1500],  # 增加文本长度
-                'raw_text': text[:1500],  # 兼容 raw_text 字段
+                'channel_tier': str(channel_tier),  # 新增：频道层级
+                'text': text[:1500],
+                'raw_text': text[:1500],
                 'symbols': json.dumps(symbols),
                 'matched_keywords': json.dumps(matched_keywords),
                 'signal_priority': str(signal_priority),
                 'event_type': event_type,
-                'timestamp': str(int(push_time * 1000)),  # 毫秒时间戳
-                'msg_timestamp': str(int(msg_time * 1000)),  # 消息原始时间（毫秒）
-                'delay_telegram': str(round(telegram_delay, 2)),  # Telegram 推送延迟
-                'delay_process': str(round(process_delay, 3)),  # 处理延迟
-                'delay_total': str(round(total_delay, 2)),  # 总延迟
+                'timestamp': str(int(push_time * 1000)),
+                'msg_timestamp': str(int(msg_time * 1000)),
+                'delay_telegram': str(round(telegram_delay, 2)),
+                'delay_process': str(round(process_delay, 3)),
+                'delay_total': str(round(total_delay, 2)),
                 'contract_address': contract_address,
                 'chain': chain,
                 'is_exchange_official': '1' if is_exchange_channel else '0',
             }
             
-            # 延迟超过 5 秒记录警告（降低阈值以便调试）
-            if total_delay > 5:
-                logger.warning(f"[DELAY] {chat_name} 总延迟={total_delay:.1f}s (TG:{telegram_delay:.1f}s + 处理:{process_delay:.3f}s)")
+            # 分级延迟告警
+            if telegram_delay > 60:
+                logger.error(f"[CRITICAL] {chat_name} TG延迟={telegram_delay:.0f}s (tier={channel_tier})")
+            elif telegram_delay > 30:
+                logger.warning(f"[DELAY] {chat_name} TG延迟={telegram_delay:.0f}s (tier={channel_tier})")
+            elif total_delay > 5 and channel_tier == 1:
+                # Tier 1 频道：5秒就告警
+                logger.warning(f"[TIER1] {chat_name} 延迟={total_delay:.1f}s")
             
             redis_client.push_event('events:raw', event_data)
             stats['events'] += 1
@@ -350,7 +472,7 @@ def determine_event_type(text: str, category: str, keywords: list) -> str:
 
 
 async def heartbeat_loop():
-    """心跳循环"""
+    """心跳循环 - 包含延迟统计"""
     while True:
         try:
             heartbeat_data = {
@@ -359,11 +481,22 @@ async def heartbeat_loop():
                 'messages': str(stats['messages']),
                 'events': str(stats['events']),
                 'errors': str(stats['errors']),
+                'filtered': str(stats.get('filtered', 0)),
                 'channels': str(len(channels)),
+                'tier1_events': str(stats.get('tier1', 0)),
+                'tier2_events': str(stats.get('tier2', 0)),
+                'tier3_events': str(stats.get('tier3', 0)),
+                'avg_tg_delay': str(round(latency_stats['avg_telegram_delay'], 1)),
+                'avg_process_delay': str(round(latency_stats['avg_process_delay'], 3)),
+                'high_latency_count': str(latency_stats['high_latency_count']),
                 'timestamp': str(int(time.time()))
             }
             redis_client.heartbeat(HEARTBEAT_KEY, heartbeat_data, ttl=120)
-            logger.debug(f"[HB] msgs={stats['messages']} events={stats['events']}")
+            
+            # 每 10 分钟输出详细统计
+            if stats['messages'] % 100 == 0 and stats['messages'] > 0:
+                logger.info(f"[STATS] 消息:{stats['messages']} 事件:{stats['events']} "
+                           f"过滤:{stats.get('filtered', 0)} 平均TG延迟:{latency_stats['avg_telegram_delay']:.1f}s")
         except Exception as e:
             logger.warning(f"心跳失败: {e}")
         await asyncio.sleep(30)

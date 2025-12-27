@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-优化版采集器 - 极速信息源
-===========================
+优化版采集器 v2.0 - 极速信息源
+===============================
 
 优化点：
 1. 多交易所 WebSocket 并发 (Binance, OKX, Bybit, KuCoin, Gate)
-2. REST API 智能调度 (高权重交易所 3秒，低权重 10秒)
+2. REST API 差异化调度（从配置文件读取）
 3. 连接池复用，减少连接开销
 4. 事件去重，避免重复推送
 5. 异步并发，最大化吞吐量
+6. 新增：公告 API 监控
 
-预期延迟: <1秒 (WebSocket) / 3秒 (REST)
+预期延迟: <1秒 (WebSocket) / 3-30秒 (REST，基于交易所权重)
 """
 
 import asyncio
@@ -27,9 +28,18 @@ from typing import Dict, Set, List, Optional
 from collections import deque
 
 # 添加 core 层路径
+project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.logging import get_logger
 from core.redis_client import RedisClient
+
+# 导入优化配置
+try:
+    sys.path.insert(0, str(project_root / 'config'))
+    from optimization_config import REST_API_POLL_INTERVALS, ANNOUNCEMENT_APIS
+except ImportError:
+    REST_API_POLL_INTERVALS = {'default': 15}
+    ANNOUNCEMENT_APIS = {}
 
 logger = get_logger('optimized_collector')
 
@@ -68,75 +78,79 @@ WEBSOCKET_FEEDS = {
     },
 }
 
-# 交易所 REST API 配置 (轮询间隔基于权重)
+# 交易所 REST API 配置 (轮询间隔从优化配置读取)
+def get_interval(exchange: str) -> int:
+    """从优化配置获取轮询间隔"""
+    return REST_API_POLL_INTERVALS.get(exchange, REST_API_POLL_INTERVALS.get('default', 15))
+
 REST_FEEDS = {
-    # Tier 1: 3秒轮询
+    # Tier 1: 高频轮询（间隔从配置读取）
     'binance': {
         'url': 'https://api.binance.com/api/v3/exchangeInfo',
         'parser': lambda d: [s['symbol'] for s in d.get('symbols', []) if s.get('status') == 'TRADING'],
-        'interval': 3,
+        'interval': get_interval('binance'),  # 配置: 3秒
         'tier': 1,
     },
     'coinbase': {
         'url': 'https://api.exchange.coinbase.com/products',
         'parser': lambda d: [p['id'] for p in d if p.get('status') == 'online'],
-        'interval': 3,
+        'interval': get_interval('coinbase'),  # 配置: 8秒
         'tier': 1,
     },
     'upbit': {
         'url': 'https://api.upbit.com/v1/market/all',
         'parser': lambda d: [m['market'] for m in d],
-        'interval': 2,  # 韩国交易所最重要，2秒
+        'interval': get_interval('upbit'),  # 配置: 3秒（韩国泵效应）
         'tier': 1,
     },
-    # Tier 2: 5秒轮询
+    # Tier 2: 中频轮询
     'okx': {
         'url': 'https://www.okx.com/api/v5/public/instruments?instType=SPOT',
         'parser': lambda d: [i['instId'] for i in d.get('data', []) if i.get('state') == 'live'],
-        'interval': 5,
+        'interval': get_interval('okx'),  # 配置: 5秒
         'tier': 2,
     },
     'bybit': {
         'url': 'https://api.bybit.com/v5/market/instruments-info?category=spot',
         'parser': lambda d: [s['symbol'] for s in d.get('result', {}).get('list', []) if s.get('status') == 'Trading'],
-        'interval': 5,
+        'interval': get_interval('bybit'),  # 配置: 5秒
         'tier': 2,
     },
     'kucoin': {
         'url': 'https://api.kucoin.com/api/v2/symbols',
         'parser': lambda d: [s['symbol'] for s in d.get('data', []) if s.get('enableTrading')],
-        'interval': 5,
+        'interval': get_interval('kucoin'),  # 配置: 10秒
         'tier': 2,
     },
     'bithumb': {
         'url': 'https://api.bithumb.com/public/ticker/ALL_KRW',
         'parser': lambda d: list(d.get('data', {}).keys()) if isinstance(d.get('data'), dict) else [],
-        'interval': 3,  # 韩国交易所
+        'interval': get_interval('bithumb'),  # 配置: 8秒
         'tier': 1,
     },
-    # Tier 3: 10秒轮询
+    # Tier 3: 低频轮询
     'gate': {
         'url': 'https://api.gateio.ws/api/v4/spot/currency_pairs',
         'parser': lambda d: [p['id'] for p in d if p.get('trade_status') == 'tradable'],
-        'interval': 10,
+        'interval': get_interval('gate'),  # 配置: 10秒
         'tier': 3,
     },
     'bitget': {
         'url': 'https://api.bitget.com/api/v2/spot/public/symbols',
         'parser': lambda d: [s['symbol'] for s in d.get('data', []) if s.get('status') == 'online'],
-        'interval': 10,
+        'interval': get_interval('bitget'),  # 配置: 15秒
         'tier': 3,
     },
     'htx': {
         'url': 'https://api.huobi.pro/v1/common/symbols',
         'parser': lambda d: [s['symbol'].upper() for s in d.get('data', []) if s.get('state') in ('online', 'pre-online')],
-        'interval': 10,
+        'interval': get_interval('htx'),  # 配置: 20秒
         'tier': 3,
     },
     'mexc': {
         'url': 'https://api.mexc.com/api/v3/exchangeInfo',
         'parser': lambda d: [s['symbol'] for s in d.get('symbols', []) if str(s.get('status')) == '1' and s.get('isSpotTradingAllowed')],
-        'interval': 15,  # MEXC 低权重
+        'interval': get_interval('mexc'),  # 配置: 30秒（垃圾币多）
         'tier': 3,
     },
 }
