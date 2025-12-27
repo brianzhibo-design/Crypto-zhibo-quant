@@ -2222,19 +2222,23 @@ HTML = '''<!DOCTYPE html>
             
             document.getElementById('detailChain').textContent = e.chain || 'unknown';
             
-            // 评分明细显示
+            // 评分明细显示 - 总是显示（即使部分字段缺失）
             const scoreSection = document.getElementById('scoreBreakdownSection');
             const scoreBreakdown = document.getElementById('scoreBreakdown');
-            if (e.score_breakdown || e.base_score !== undefined) {
+            
+            // 尝试从多个来源获取评分数据
+            const bd = e.score_breakdown || {};
+            const baseScore = parseFloat(bd.base_score || e.base_score || 0);
+            const eventScore = parseFloat(bd.event_score || e.event_score || 0);
+            const exchangeMult = parseFloat(bd.exchange_mult || e.exchange_multiplier || 0.8);
+            const freshnessMult = parseFloat(bd.freshness_mult || e.freshness_multiplier || 1);
+            const multiBonus = parseFloat(bd.multi_bonus || e.multi_bonus || 0);
+            const koreanBonus = parseFloat(bd.korean_bonus || e.korean_bonus || 0);
+            const finalScore = parseFloat(bd.final || e.score || 0);
+            
+            // 总是显示评分明细（帮助调试和理解评分）
+            if (true) {
                 scoreSection.classList.remove('hidden');
-                const bd = e.score_breakdown || {};
-                const baseScore = bd.base_score || e.base_score || 0;
-                const eventScore = bd.event_score || e.event_score || 0;
-                const exchangeMult = bd.exchange_mult || e.exchange_multiplier || 1;
-                const freshnessMult = bd.freshness_mult || e.freshness_multiplier || 1;
-                const multiBonus = bd.multi_bonus || e.multi_bonus || 0;
-                const koreanBonus = bd.korean_bonus || e.korean_bonus || 0;
-                const finalScore = bd.final || e.score || 0;
                 
                 const eventType = e.event_type || 'unknown';
                 const classifiedSource = e.classified_source || e.source || '-';

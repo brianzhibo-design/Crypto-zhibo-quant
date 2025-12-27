@@ -160,7 +160,10 @@ channels = []
 
 
 async def message_handler(event):
-    """处理新消息 - 增强版"""
+    """处理新消息 - 高速版（优化延迟）"""
+    # 立即记录接收时间
+    receive_time = time.time()
+    
     try:
         stats['messages'] += 1
         
@@ -168,9 +171,21 @@ async def message_handler(event):
         if not text or len(text) < 10:  # 忽略太短的消息
             return
         
-        chat = await event.get_chat()
-        chat_id = chat.id
-        chat_name = getattr(chat, 'title', str(chat_id))
+        # 优化：使用消息的 peer_id 获取 chat_id（避免额外 API 调用）
+        chat_id = event.chat_id or (event.message.peer_id.channel_id if hasattr(event.message.peer_id, 'channel_id') else None)
+        
+        # 从缓存获取频道名，避免阻塞
+        if chat_id and chat_id in channel_info:
+            chat_name = channel_info[chat_id].get('title', str(chat_id))
+        else:
+            # 只有在缓存中没有时才调用 get_chat
+            chat = await event.get_chat()
+            chat_id = chat.id
+            chat_name = getattr(chat, 'title', str(chat_id))
+            # 缓存频道名
+            if chat_id:
+                channel_info[chat_id] = channel_info.get(chat_id, {})
+                channel_info[chat_id]['title'] = chat_name
         
         info = channel_info.get(chat_id, {})
         category = info.get('category', 'unknown')
@@ -213,10 +228,14 @@ async def message_handler(event):
             # 判断消息类型
             event_type = determine_event_type(text, category, matched_keywords)
             
-            # 记录消息原始时间和检测时间
+            # 记录消息时间链路
             msg_time = event.message.date.timestamp() if event.message.date else time.time()
-            detect_time = time.time()
-            delay_seconds = detect_time - msg_time
+            push_time = time.time()
+            
+            # 计算各阶段延迟
+            telegram_delay = receive_time - msg_time  # Telegram 推送延迟
+            process_delay = push_time - receive_time  # 本地处理延迟
+            total_delay = push_time - msg_time  # 总延迟
             
             event_data = {
                 'source': 'social_telegram',
@@ -230,17 +249,19 @@ async def message_handler(event):
                 'matched_keywords': json.dumps(matched_keywords),
                 'signal_priority': str(signal_priority),
                 'event_type': event_type,
-                'timestamp': str(int(detect_time)),
-                'msg_timestamp': str(int(msg_time)),  # 消息原始时间
-                'delay_seconds': str(int(delay_seconds)),  # 延迟秒数
+                'timestamp': str(int(push_time * 1000)),  # 毫秒时间戳
+                'msg_timestamp': str(int(msg_time * 1000)),  # 消息原始时间（毫秒）
+                'delay_telegram': str(round(telegram_delay, 2)),  # Telegram 推送延迟
+                'delay_process': str(round(process_delay, 3)),  # 处理延迟
+                'delay_total': str(round(total_delay, 2)),  # 总延迟
                 'contract_address': contract_address,
                 'chain': chain,
                 'is_exchange_official': '1' if is_exchange_channel else '0',
             }
             
-            # 如果延迟超过 10 秒，记录警告
-            if delay_seconds > 10:
-                logger.warning(f"[DELAY] {chat_name} 消息延迟 {delay_seconds:.1f}s")
+            # 延迟超过 5 秒记录警告（降低阈值以便调试）
+            if total_delay > 5:
+                logger.warning(f"[DELAY] {chat_name} 总延迟={total_delay:.1f}s (TG:{telegram_delay:.1f}s + 处理:{process_delay:.3f}s)")
             
             redis_client.push_event('events:raw', event_data)
             stats['events'] += 1
