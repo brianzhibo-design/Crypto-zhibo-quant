@@ -27,7 +27,34 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 
 # 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
+
+# 自动加载 .env 文件
+def load_env_file():
+    """加载 .env 文件"""
+    env_paths = [
+        os.path.join(PROJECT_ROOT, '.env'),
+        os.path.join(PROJECT_ROOT, 'docker', '.env'),
+        os.path.expanduser('~/.env'),
+    ]
+    
+    for env_path in env_paths:
+        if os.path.exists(env_path):
+            with open(env_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, _, value = line.partition('=')
+                        key = key.strip()
+                        value = value.strip().strip('"').strip("'")
+                        if key and value:
+                            os.environ.setdefault(key, value)
+            print(f"✅ 已加载环境变量: {env_path}")
+            return True
+    return False
+
+load_env_file()
 
 logging.basicConfig(
     level=logging.INFO,
