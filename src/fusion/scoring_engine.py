@@ -46,48 +46,59 @@ from core.utils import generate_event_hash
 
 SOURCE_SCORES = {
     # ========== 发现层 (55-70) ==========
-    # 唯一有真正"提前量"的来源
+    # 唯一有真正"提前量"的来源 - 这些是最重要的！
     'tg_alpha_intel': 70,           # 方程式等顶级情报（提前5-30分钟）
     'tg_insider_leak': 65,          # 疑似内部泄露
+    'announcement_api_tier1': 65,   # Tier1 公告API（Binance/Coinbase/Upbit）
+    'announcement_api_binance': 65, # Binance 公告API
+    'announcement_api_coinbase': 63,# Coinbase 公告API
+    'announcement_api_upbit': 62,   # Upbit 公告API（韩国泵）
+    'announcement_api_okx': 60,     # OKX 公告API
+    'announcement_api_bybit': 58,   # Bybit 公告API
     
-    # ========== 首发确认层 (40-55) ==========
-    # 官方渠道，权威但无提前量
+    # ========== 官方确认层 (45-58) ==========
+    # 官方渠道，权威
     'tg_exchange_official': 55,     # 交易所官方TG（最快官方源）
-    'twitter_exchange_official': 50, # 交易所官推（略慢于TG）
-    'rest_api_binance': 48,         # Binance API检测
-    'rest_api_coinbase': 47,        # Coinbase API
-    'rest_api_okx': 46,             # OKX API
-    'rest_api_upbit': 45,           # Upbit API（韩国泵）
-    'rest_api_bybit': 43,           # Bybit API
-    'rest_api_tier1': 45,           # Tier1 API (向后兼容)
-    'rest_api_tier2': 40,           # Tier2 API
-    'rest_api': 38,                 # 通用API
+    'twitter_exchange_official': 52, # 交易所官推
+    'announcement_api_tier2': 50,   # Tier2 公告API（Gate/KuCoin/Bitget）
+    'announcement_api_gate': 50,    # Gate 公告API
+    'announcement_api_kucoin': 48,  # KuCoin 公告API
+    'announcement_api_bitget': 45,  # Bitget 公告API
     
-    # ========== 开盘确认层 (25-40) ==========
-    # 确认已开盘，价格可能已涨
-    'kr_market': 38,                # 韩国所新币（泵效应，有套利价值）
-    'ws_new_pair': 35,              # WebSocket检测到新交易对
-    'ws_binance': 32,               # Binance WebSocket
-    'ws_okx': 30,                   # OKX WebSocket
-    'ws_bybit': 28,                 # Bybit WebSocket
-    'ws_upbit': 28,                 # Upbit WebSocket
-    'ws_gate': 25,                  # Gate WebSocket
-    'ws_kucoin': 25,                # KuCoin WebSocket
-    'ws_bitget': 22,                # Bitget WebSocket
+    # ========== 确认层 (15-38) ==========
+    # exchangeInfo/WebSocket - 确认开盘，无提前量
+    'kr_market_new': 38,            # 韩国所新币（泵效应，有套利价值）
+    'twitter_project_official': 25, # 项目方官宣
+    'tg_project_official': 25,      # 项目方TG
+    'chain_liquidity_added': 22,    # 链上添加流动性
+    'chain_contract': 20,           # 合约部署
+    'chain': 18,                    # 链上事件
     
-    # ========== 辅助确认层 (15-25) ==========
-    'chain_liquidity_added': 25,    # 链上添加流动性
-    'chain_contract': 22,           # 合约部署
-    'chain': 20,                    # 链上事件
-    'twitter_project_official': 20, # 项目方官宣
-    'tg_project_official': 20,      # 项目方TG
-    'market': 18,                   # 通用市场源
+    # ========== 确认层 - exchangeInfo/WebSocket (10-18) ==========
+    # 这些检测到时已经开盘，价值很低
+    'rest_api_binance': 18,         # Binance exchangeInfo（仅确认）
+    'rest_api_coinbase': 17,        # Coinbase exchangeInfo
+    'rest_api_okx': 16,             # OKX exchangeInfo
+    'rest_api_upbit': 16,           # Upbit exchangeInfo
+    'rest_api_bybit': 15,           # Bybit exchangeInfo
+    'rest_api_tier1': 15,           # Tier1 exchangeInfo
+    'rest_api_tier2': 12,           # Tier2 exchangeInfo
+    'rest_api': 10,                 # 通用 exchangeInfo
+    'ws_new_pair': 15,              # WebSocket检测到新交易对
+    'ws_binance': 12,               # Binance WebSocket
+    'ws_okx': 10,                   # OKX WebSocket
+    'ws_bybit': 10,                 # Bybit WebSocket
+    'ws_upbit': 10,                 # Upbit WebSocket
+    'ws_gate': 8,                   # Gate WebSocket
+    'ws_kucoin': 8,                 # KuCoin WebSocket
+    'ws_bitget': 6,                 # Bitget WebSocket
+    'market': 8,                    # 通用市场源
     
-    # ========== 噪音层 (0-10) ==========
-    'social_kol': 10,               # KOL转发（可能是广告）
-    'social_telegram': 8,           # 普通TG群/频道
-    'social_twitter': 6,            # 普通Twitter
-    'social_general': 5,            # 普通社交媒体
+    # ========== 噪音层 (0-8) ==========
+    'social_kol': 8,                # KOL转发（可能是广告）
+    'social_telegram': 6,           # 普通TG群/频道
+    'social_twitter': 5,            # 普通Twitter
+    'social_general': 4,            # 普通社交媒体
     'news': 3,                      # 新闻（滞后5-30分钟）
     'unknown': 0,
 }

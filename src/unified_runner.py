@@ -187,6 +187,26 @@ class UnifiedRunner:
             self.stats['errors'] += 1
     
     # ============================================================
+    # 公告 API 监控（核心！有提前量）
+    # ============================================================
+    
+    async def run_announcement(self):
+        """交易所公告 API 监控 - 核心发现层"""
+        if not ENABLED_MODULES.get('announcement', True):
+            return
+        
+        try:
+            from collectors.announcement_monitor import AnnouncementMonitor
+            logger.info("[START] Announcement API Monitor (核心发现层)")
+            monitor = AnnouncementMonitor()
+            await monitor.run()
+        except ImportError as e:
+            logger.warning(f"Announcement Monitor 导入失败: {e}")
+        except Exception as e:
+            logger.error(f"Announcement Monitor 错误: {e}")
+            self.stats['errors'] += 1
+    
+    # ============================================================
     # 融合引擎
     # ============================================================
     
@@ -301,6 +321,7 @@ class UnifiedRunner:
             'blockchain': asyncio.create_task(self.run_blockchain()),
             'telegram': asyncio.create_task(self.run_telegram()),
             'news': asyncio.create_task(self.run_news()),
+            'announcement': asyncio.create_task(self.run_announcement()),  # 公告API监控
             'fusion': asyncio.create_task(self.run_fusion()),
             'pusher': asyncio.create_task(self.run_pusher()),
             'memory': asyncio.create_task(self.memory_monitor()),

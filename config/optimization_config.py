@@ -74,19 +74,84 @@ REST_API_POLL_INTERVALS = {
     'default': 15,
 }
 
-# 公告 API 配置
+# ==================== 公告 API 配置（核心监控目标）====================
+# 公告 API 是除了 Telegram/Twitter 外最有价值的信息源
+# 比 exchangeInfo/WebSocket 有真正的提前量
+
 ANNOUNCEMENT_APIS = {
+    # Tier 1: 最重要的交易所公告
     'binance': {
         'url': 'https://www.binance.com/bapi/composite/v1/public/cms/article/list/query',
         'interval': 5,
-        'params': {'type': 1, 'catalogId': 48, 'pageSize': 5},
+        'method': 'POST',
+        'body': {'type': 1, 'catalogId': 48, 'pageSize': 10},
         'enabled': True,
+        'tier': 1,
     },
     'okx': {
         'url': 'https://www.okx.com/api/v5/support/announcements',
         'interval': 5,
-        'params': {'annType': 'listings'},
+        'method': 'GET',
+        'params': {'page': '1', 'limit': '10'},
         'enabled': True,
+        'tier': 1,
+    },
+    'upbit': {
+        'url': 'https://api-manager.upbit.com/api/v1/notices',
+        'interval': 3,  # 韩国所更频繁
+        'method': 'GET',
+        'params': {'page': '1', 'per_page': '20'},
+        'enabled': True,
+        'tier': 1,
+    },
+    'bybit': {
+        'url': 'https://api.bybit.com/v5/announcements/index',
+        'interval': 5,
+        'method': 'GET',
+        'params': {'locale': 'en-US', 'limit': '10'},
+        'enabled': True,
+        'tier': 1,
+    },
+    'coinbase': {
+        'url': 'https://www.coinbase.com/api/v2/assets/prices',
+        'interval': 10,
+        'method': 'GET',
+        'params': {'filter': 'listed'},
+        'enabled': True,
+        'tier': 1,
+    },
+    
+    # Tier 2: 次要交易所公告
+    'gate': {
+        'url': 'https://www.gate.io/api/v4/announcements',
+        'interval': 10,
+        'method': 'GET',
+        'params': {'page': '1', 'limit': '10'},
+        'enabled': True,
+        'tier': 2,
+    },
+    'kucoin': {
+        'url': 'https://www.kucoin.com/_api/cms/articles',
+        'interval': 10,
+        'method': 'GET',
+        'params': {'category': 'listing', 'lang': 'en_US', 'page': '1', 'pageSize': '10'},
+        'enabled': True,
+        'tier': 2,
+    },
+    'bitget': {
+        'url': 'https://api.bitget.com/api/v2/public/annoucements',
+        'interval': 10,
+        'method': 'GET',
+        'params': {'language': 'en_US', 'annType': 'coin_listings'},
+        'enabled': True,
+        'tier': 2,
+    },
+    'bithumb': {
+        'url': 'https://api.bithumb.com/public/assetsstatus/ALL',
+        'interval': 5,
+        'method': 'GET',
+        'enabled': True,
+        'tier': 1,
     },
 }
 
