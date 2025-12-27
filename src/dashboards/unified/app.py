@@ -2001,8 +2001,8 @@ HTML = '''<!DOCTYPE html>
     </main>
 
     <!-- Search Modal -->
-    <div id="searchModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50">
-        <div class="card p-5 w-full max-w-lg mx-4 max-h-[70vh] overflow-hidden">
+    <div id="searchModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50" onclick="if(event.target===this)closeSearch()">
+        <div class="card p-5 w-full max-w-lg mx-4 max-h-[70vh] overflow-hidden" onclick="event.stopPropagation()">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="font-semibold text-slate-700">搜索</h3>
                 <button onclick="closeSearch()" class="text-slate-400 hover:text-slate-600 transition-colors">
@@ -2017,8 +2017,8 @@ HTML = '''<!DOCTYPE html>
     </div>
 
     <!-- Test Modal -->
-    <div id="testModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50">
-        <div class="card p-5 w-full max-w-sm mx-4">
+    <div id="testModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50" onclick="if(event.target===this)hideTest()">
+        <div class="card p-5 w-full max-w-sm mx-4" onclick="event.stopPropagation()">
             <h3 class="font-semibold text-slate-700 mb-4">发送测试事件</h3>
             <input id="testSymbol" type="text" placeholder="代币符号 (如 PEPE)" 
                    class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 placeholder-slate-400 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 mb-4">
@@ -2032,7 +2032,7 @@ HTML = '''<!DOCTYPE html>
     
     <!-- Pairs Modal 交易对查看弹窗 -->
     <div id="pairsModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50" onclick="if(event.target===this)closePairsModal()">
-        <div class="card p-6 w-full max-w-4xl mx-4 max-h-[85vh] overflow-hidden flex flex-col">
+        <div class="card p-6 w-full max-w-4xl mx-4 max-h-[85vh] overflow-hidden flex flex-col" onclick="event.stopPropagation()">
             <div class="flex justify-between items-center mb-4">
                 <div>
                     <h3 id="pairsModalTitle" class="font-semibold text-slate-700 text-lg">代币列表</h3>
@@ -2072,7 +2072,7 @@ HTML = '''<!DOCTYPE html>
     
     <!-- Token Detail Modal 代币详情弹窗（实时行情） -->
     <div id="tokenDetailModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50" onclick="if(event.target===this)closeTokenDetail()">
-        <div class="card p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+        <div class="card p-6 w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col" onclick="event.stopPropagation()">
             <div class="flex justify-between items-center mb-4">
                 <div class="flex items-center gap-3">
                     <div id="tokenIcon" class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-bold text-xl">?</div>
@@ -2185,7 +2185,7 @@ HTML = '''<!DOCTYPE html>
     
     <!-- Event Detail Modal 消息详情弹窗 -->
     <div id="eventDetailModal" class="fixed inset-0 bg-black/30 backdrop-blur-sm hidden items-center justify-center z-50" onclick="if(event.target===this)closeEventDetail()">
-        <div class="card p-6 w-full max-w-2xl mx-4 max-h-[85vh] overflow-hidden">
+        <div class="card p-6 w-full max-w-2xl mx-4 max-h-[85vh] overflow-hidden" onclick="event.stopPropagation()">
             <div class="flex justify-between items-center mb-5">
                 <div class="flex items-center gap-3">
                     <div id="detailRatingBadge" class="w-12 h-12 rounded-xl bg-emerald-500 flex items-center justify-center text-white font-bold text-xl">S</div>
@@ -2858,7 +2858,8 @@ HTML = '''<!DOCTYPE html>
                 // 提取基础代币
                 const base = pair.replace(/_USDT|\/USDT|-USDT|USDT|_USD|\/USD|-USD|USD/gi, '');
                 h += `
-                <div class="bg-slate-50 hover:bg-sky-50 rounded-lg p-2 text-center cursor-pointer transition-colors" onclick="searchSymbol('${base}')">
+                <div class="bg-slate-50 hover:bg-sky-50 rounded-lg p-2 text-center cursor-pointer transition-colors" 
+                     onclick="event.stopPropagation(); showTokenDetail('${base}')">
                     <div class="font-medium text-slate-700 text-sm">${pair}</div>
                     <div class="text-xs text-slate-400">${base}</div>
                 </div>`;
@@ -2902,7 +2903,8 @@ HTML = '''<!DOCTYPE html>
                 const catBadge = catStyle.label ? `<span class="${catStyle.bg} ${catStyle.text} text-xs px-1.5 py-0.5 rounded">${catStyle.label}</span>` : '';
                 
                 h += `
-                <div class="bg-slate-50 hover:bg-sky-50 rounded-lg p-3 cursor-pointer transition-colors flex items-center justify-between" onclick="showTokenDetail('${t.symbol}')">
+                <div class="bg-slate-50 hover:bg-sky-50 rounded-lg p-3 cursor-pointer transition-colors flex items-center justify-between" 
+                     onclick="event.stopPropagation(); showTokenDetail('${t.symbol}')">
                     <div class="flex items-center gap-2">
                         <div class="font-bold text-slate-800">${t.symbol}</div>
                         ${catBadge}
