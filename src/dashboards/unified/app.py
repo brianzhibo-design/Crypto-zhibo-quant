@@ -612,7 +612,7 @@ def get_insight():
 3) 是否有值得关注的趋势"""
 
                 response = client.messages.create(
-                    model="claude-haiku-4-5-latest",
+                    model="claude-haiku-4-5",
                     max_tokens=200,
                     messages=[
                         {"role": "user", "content": prompt}
