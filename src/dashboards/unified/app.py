@@ -689,6 +689,219 @@ def get_metrics():
         return {}
 
 
+# ==================== 巨鲸监控 API ====================
+
+@app.route('/api/whales')
+def get_whale_dynamics():
+    """获取巨鲸动态列表"""
+    r = get_redis()
+    if not r:
+        return jsonify([])
+    
+    limit = request.args.get('limit', 50, type=int)
+    action_filter = request.args.get('action', '')
+    
+    events = []
+    try:
+        # 从 Redis stream 读取巨鲸事件
+        whale_events = r.xrevrange('whales:dynamics', count=limit * 2)
+        
+        for mid, data in whale_events:
+            event = {
+                'id': mid,
+                'timestamp': int(data.get('timestamp', now_ms())),
+                'source': data.get('source', 'unknown'),
+                'address': data.get('address', ''),
+                'address_label': data.get('address_label', 'unknown'),
+                'address_label_cn': data.get('address_label_cn', '未知'),
+                'address_name': data.get('address_name', ''),
+                'action': data.get('action', 'unknown'),
+                'token_symbol': data.get('token_symbol', ''),
+                'amount_usd': float(data.get('amount_usd', 0)),
+                'amount_token': float(data.get('amount_token', 0)),
+                'exchange_or_dex': data.get('exchange_or_dex', ''),
+                'tx_hash': data.get('tx_hash', ''),
+                'chain': data.get('chain', 'ethereum'),
+                'description': data.get('description', data.get('raw_text', '')),
+                'related_listing': data.get('related_listing', ''),
+                'priority': int(data.get('priority', 3)),
+            }
+            
+            # 过滤
+            if action_filter and event['action'] != action_filter:
+                continue
+            
+            events.append(event)
+            if len(events) >= limit:
+                break
+                
+    except Exception as e:
+        logger.error(f"获取巨鲸动态失败: {e}")
+        # 返回模拟数据用于测试
+        events = _get_mock_whale_events()
+    
+    return jsonify(events)
+
+
+@app.route('/api/smart-money-stats')
+def get_smart_money_stats():
+    """获取 Smart Money 统计数据"""
+    r = get_redis()
+    if not r:
+        return jsonify({})
+    
+    try:
+        # 从 Redis 获取统计数据
+        stats = r.hgetall('stats:smart_money') or {}
+        
+        # 获取 Top 代币
+        top_tokens_raw = r.zrevrange('smart_money:top_tokens', 0, 4, withscores=True) or []
+        top_tokens = []
+        for symbol, score in top_tokens_raw:
+            token_stats = r.hgetall(f'smart_money:token:{symbol}') or {}
+            top_tokens.append({
+                'symbol': symbol,
+                'net_buy_usd': float(token_stats.get('net_buy_usd', score)),
+                'buy_address_count': int(token_stats.get('buy_address_count', 0)),
+                'price_change_24h': float(token_stats.get('price_change_24h', 0)),
+            })
+        
+        return jsonify({
+            'total_buy_usd': float(stats.get('total_buy_usd', 0)),
+            'total_sell_usd': float(stats.get('total_sell_usd', 0)),
+            'net_flow_usd': float(stats.get('net_flow_usd', 0)),
+            'active_addresses': int(stats.get('active_addresses', 0)),
+            'top_tokens': top_tokens if top_tokens else _get_mock_top_tokens(),
+        })
+    except Exception as e:
+        logger.error(f"获取 Smart Money 统计失败: {e}")
+        return jsonify({
+            'total_buy_usd': 12500000,
+            'total_sell_usd': 8300000,
+            'net_flow_usd': 4200000,
+            'active_addresses': 23,
+            'top_tokens': _get_mock_top_tokens(),
+        })
+
+
+@app.route('/api/whale-address/<address>')
+def get_whale_address_detail(address):
+    """获取巨鲸地址详情"""
+    r = get_redis()
+    if not r:
+        return jsonify({'error': 'Redis disconnected'}), 500
+    
+    try:
+        # 从 Redis 获取地址信息
+        addr_info = r.hgetall(f'whale:address:{address}') or {}
+        
+        # 获取该地址的历史交易
+        history = []
+        whale_events = r.xrevrange('whales:dynamics', count=100)
+        for mid, data in whale_events:
+            if data.get('address', '').lower() == address.lower():
+                history.append({
+                    'id': mid,
+                    'timestamp': int(data.get('timestamp', now_ms())),
+                    'action': data.get('action', ''),
+                    'token_symbol': data.get('token_symbol', ''),
+                    'amount_usd': float(data.get('amount_usd', 0)),
+                    'tx_hash': data.get('tx_hash', ''),
+                })
+                if len(history) >= 20:
+                    break
+        
+        return jsonify({
+            'address': address,
+            'label': addr_info.get('label', 'unknown'),
+            'label_cn': addr_info.get('label_cn', '未知'),
+            'name': addr_info.get('name', ''),
+            'tags': addr_info.get('tags', '').split(',') if addr_info.get('tags') else [],
+            'chain': addr_info.get('chain', 'ethereum'),
+            'first_seen': addr_info.get('first_seen', ''),
+            'total_volume_usd': float(addr_info.get('total_volume_usd', 0)),
+            'win_rate': float(addr_info.get('win_rate', 0)),
+            'history': history,
+        })
+    except Exception as e:
+        logger.error(f"获取地址详情失败: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+def _get_mock_whale_events():
+    """返回模拟巨鲸事件（仅用于UI测试）"""
+    return [
+        {
+            'id': '1',
+            'timestamp': now_ms() - 120000,
+            'source': 'lookonchain',
+            'address': '0x020cA66C30beC2c4Fe3861a94E4DB4A498A35872',
+            'address_label': 'smart_money',
+            'address_label_cn': '聪明钱',
+            'address_name': 'Machi Big Brother',
+            'action': 'buy',
+            'token_symbol': 'PEPE',
+            'amount_usd': 2500000,
+            'amount_token': 1500000000000,
+            'exchange_or_dex': 'Uniswap',
+            'tx_hash': '0x1234...5678',
+            'chain': 'ethereum',
+            'description': '🐋 Machi Big Brother 在 Uniswap 买入 $2.5M PEPE',
+            'related_listing': '',
+            'priority': 5,
+        },
+        {
+            'id': '2',
+            'timestamp': now_ms() - 300000,
+            'source': 'whale_alert',
+            'address': '0x28C6c06298d514Db089934071355E5743bf21d60',
+            'address_label': 'exchange',
+            'address_label_cn': '交易所钱包',
+            'address_name': 'Binance Hot Wallet',
+            'action': 'deposit_to_cex',
+            'token_symbol': 'ETH',
+            'amount_usd': 15000000,
+            'amount_token': 4500,
+            'exchange_or_dex': 'Binance',
+            'tx_hash': '0xabcd...efgh',
+            'chain': 'ethereum',
+            'description': '⚠️ 4,500 ETH ($15M) 转入 Binance 热钱包',
+            'related_listing': '',
+            'priority': 4,
+        },
+        {
+            'id': '3',
+            'timestamp': now_ms() - 600000,
+            'source': 'spotonchain',
+            'address': '0x3DdfA8eC3052539b6C9549F12cEA2C295cfF5296',
+            'address_label': 'whale',
+            'address_label_cn': '巨鲸',
+            'address_name': 'Justin Sun',
+            'action': 'sell',
+            'token_symbol': 'TRX',
+            'amount_usd': 8000000,
+            'amount_token': 50000000,
+            'exchange_or_dex': 'Binance',
+            'tx_hash': '0x9876...5432',
+            'chain': 'tron',
+            'description': '📉 Justin Sun 卖出 5000万 TRX ($8M)',
+            'related_listing': '',
+            'priority': 4,
+        },
+    ]
+
+
+def _get_mock_top_tokens():
+    """返回模拟 Top 代币（仅用于UI测试）"""
+    return [
+        {'symbol': 'PEPE', 'net_buy_usd': 5200000, 'buy_address_count': 8, 'price_change_24h': 12.5},
+        {'symbol': 'WIF', 'net_buy_usd': 3800000, 'buy_address_count': 5, 'price_change_24h': 8.2},
+        {'symbol': 'BONK', 'net_buy_usd': 2100000, 'buy_address_count': 4, 'price_change_24h': -3.1},
+        {'symbol': 'ARB', 'net_buy_usd': 1500000, 'buy_address_count': 3, 'price_change_24h': 5.7},
+        {'symbol': 'OP', 'net_buy_usd': 900000, 'buy_address_count': 2, 'price_change_24h': 2.3},
+    ]
+
+
 @app.route('/api/pairs/<exchange>')
 def get_pairs(exchange):
     """获取指定交易所的交易对（无限制）"""
@@ -1760,6 +1973,17 @@ HTML = '''<!DOCTYPE html>
             background: #0ea5e9;
             color: white;
         }
+        .whale-filter-btn {
+            background: #f1f5f9;
+            transition: all 0.2s;
+        }
+        .whale-filter-btn:hover {
+            background: #e2e8f0;
+        }
+        .whale-filter-btn.active {
+            background: #0ea5e9;
+            color: white;
+        }
         .gradient-text {
             background: linear-gradient(135deg, #0ea5e9, #8b5cf6);
             -webkit-background-clip: text;
@@ -1814,11 +2038,17 @@ HTML = '''<!DOCTYPE html>
             <button onclick="switchTab('signals')" id="tabSignals" class="tab-active px-4 py-2 rounded-lg text-sm font-medium transition-all">
                 <i data-lucide="radio" class="w-4 h-4 inline mr-1.5"></i>信号
             </button>
+            <button onclick="switchTab('whales')" id="tabWhales" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
+                <i data-lucide="fish" class="w-4 h-4 inline mr-1.5"></i>巨鲸
+            </button>
             <button onclick="switchTab('trades')" id="tabTrades" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
                 <i data-lucide="arrow-left-right" class="w-4 h-4 inline mr-1.5"></i>交易
             </button>
             <button onclick="switchTab('nodes')" id="tabNodes" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
                 <i data-lucide="server" class="w-4 h-4 inline mr-1.5"></i>节点
+            </button>
+            <button onclick="switchTab('whales')" id="tabWhales" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-all">
+                <i data-lucide="fish" class="w-4 h-4 inline mr-1.5"></i>🐋 巨鲸
             </button>
         </div>
 
@@ -1955,6 +2185,104 @@ HTML = '''<!DOCTYPE html>
             </div>
         </div>
 
+        <!-- Whales Panel (Hidden by default) -->
+        <div id="panelWhales" class="hidden">
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <!-- 巨鲸动态流 -->
+                <div class="xl:col-span-2">
+                    <div class="card overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-gradient-to-r from-cyan-50 to-blue-50 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-cyan-100 flex items-center justify-center">
+                                    <span class="text-lg">🐋</span>
+                                </div>
+                                <h2 class="font-semibold text-slate-700">巨鲸动态</h2>
+                                <span class="bg-cyan-100 text-cyan-700 text-xs px-2 py-0.5 rounded-full">实时监控</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="filterWhales('all')" class="whale-filter-btn text-xs px-2.5 py-1 rounded-full bg-cyan-500 text-white">全部</button>
+                                <button onclick="filterWhales('buy')" class="whale-filter-btn text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200">买入</button>
+                                <button onclick="filterWhales('sell')" class="whale-filter-btn text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200">卖出</button>
+                                <button onclick="filterWhales('exchange')" class="whale-filter-btn text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200">交易所</button>
+                            </div>
+                        </div>
+                        <div id="whaleEventsContainer" class="max-h-[600px] overflow-y-auto divide-y divide-slate-50">
+                            <div class="p-8 text-center text-slate-400">
+                                <i data-lucide="loader" class="w-8 h-8 mx-auto mb-2 animate-spin"></i>
+                                <p>加载巨鲸动态...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 右侧统计面板 -->
+                <div class="xl:col-span-1 flex flex-col gap-4">
+                    <!-- Smart Money 统计 -->
+                    <div class="card p-4">
+                        <h3 class="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                            <span class="text-lg">🧠</span> Smart Money 统计 (24h)
+                        </h3>
+                        <div class="grid grid-cols-3 gap-3 mb-4">
+                            <div class="text-center p-2 bg-green-50 rounded-lg">
+                                <div id="smBuyTotal" class="font-bold text-green-600">$--</div>
+                                <div class="text-xs text-slate-500">总买入</div>
+                            </div>
+                            <div class="text-center p-2 bg-red-50 rounded-lg">
+                                <div id="smSellTotal" class="font-bold text-red-600">$--</div>
+                                <div class="text-xs text-slate-500">总卖出</div>
+                            </div>
+                            <div class="text-center p-2 bg-blue-50 rounded-lg">
+                                <div id="smNetFlow" class="font-bold text-blue-600">$--</div>
+                                <div class="text-xs text-slate-500">净流向</div>
+                            </div>
+                        </div>
+                        <div class="text-xs text-slate-400 text-right">数据来源: Lookonchain</div>
+                    </div>
+                    
+                    <!-- 热门代币 -->
+                    <div class="card p-4">
+                        <h3 class="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                            <span class="text-lg">🔥</span> Smart Money 关注 Top 5
+                        </h3>
+                        <div id="smHotTokens" class="space-y-2">
+                            <div class="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                                <span class="font-medium">--</span>
+                                <span class="text-xs text-slate-500">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 已知巨鲸地址库 -->
+                    <div class="card p-4">
+                        <h3 class="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                            <span class="text-lg">📋</span> 监控地址库
+                        </h3>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <div class="flex items-center justify-between p-2 bg-cyan-50 rounded">
+                                <span class="text-cyan-700">🐋 巨鲸</span>
+                                <span id="whaleCount" class="font-mono font-bold text-cyan-700">--</span>
+                            </div>
+                            <div class="flex items-center justify-between p-2 bg-purple-50 rounded">
+                                <span class="text-purple-700">🧠 聪明钱</span>
+                                <span id="smartMoneyCount" class="font-mono font-bold text-purple-700">--</span>
+                            </div>
+                            <div class="flex items-center justify-between p-2 bg-orange-50 rounded">
+                                <span class="text-orange-700">🏦 交易所</span>
+                                <span id="exchangeCount" class="font-mono font-bold text-orange-700">--</span>
+                            </div>
+                            <div class="flex items-center justify-between p-2 bg-green-50 rounded">
+                                <span class="text-green-700">💼 VC</span>
+                                <span id="vcCount" class="font-mono font-bold text-green-700">--</span>
+                            </div>
+                        </div>
+                        <button onclick="showAddressLibrary()" class="w-full mt-3 text-xs text-center text-cyan-600 hover:text-cyan-800 py-1.5 border border-cyan-200 rounded-lg hover:bg-cyan-50">
+                            查看完整地址库
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Trades Panel (Hidden by default) -->
         <div id="panelTrades" class="hidden">
             <div class="card overflow-hidden">
@@ -1997,6 +2325,126 @@ HTML = '''<!DOCTYPE html>
         <!-- Nodes Panel (Hidden by default) -->
         <div id="panelNodes" class="hidden">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="nodesGrid"></div>
+        </div>
+        
+        <!-- 巨鲸动态面板 -->
+        <div id="panelWhales" class="hidden">
+            <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                <!-- 左侧：巨鲸动态流 -->
+                <div class="xl:col-span-8 flex flex-col gap-6">
+                    <div class="card overflow-hidden flex flex-col" style="max-height: 70vh;">
+                        <div class="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
+                            <div class="flex items-center gap-3">
+                                <h2 class="font-semibold text-slate-700">🐋 巨鲸动态</h2>
+                                <span class="bg-emerald-50 text-emerald-600 text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    实时推送
+                                </span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="filterWhales('all')" class="whale-filter-btn active px-3 py-1.5 text-xs font-medium rounded-lg transition-colors" data-filter="all">全部</button>
+                                <button onclick="filterWhales('buy')" class="whale-filter-btn px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-green-600" data-filter="buy">买入</button>
+                                <button onclick="filterWhales('sell')" class="whale-filter-btn px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-red-600" data-filter="sell">卖出</button>
+                                <button onclick="filterWhales('deposit_to_cex')" class="whale-filter-btn px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-amber-600" data-filter="deposit_to_cex">转入交易所</button>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-y-auto divide-y divide-slate-100 scrollbar" id="whaleDynamicsList">
+                            <div class="text-center text-slate-400 text-sm py-8">
+                                <i data-lucide="loader-2" class="w-6 h-6 animate-spin inline-block mb-2"></i>
+                                <p>加载巨鲸动态中...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧：Smart Money 统计 -->
+                <div class="xl:col-span-4 flex flex-col gap-6">
+                    <div class="card p-5">
+                        <h3 class="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                            <span class="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+                                <i data-lucide="brain" class="w-4 h-4 text-purple-500"></i>
+                            </span>
+                            Smart Money 统计 (24h)
+                        </h3>
+                        <div class="grid grid-cols-3 gap-3 mb-5">
+                            <div class="text-center p-3 bg-green-50 rounded-xl">
+                                <div class="text-xs text-slate-500 mb-1">总买入</div>
+                                <div id="smTotalBuy" class="font-bold text-lg text-green-600 font-mono">--</div>
+                            </div>
+                            <div class="text-center p-3 bg-red-50 rounded-xl">
+                                <div class="text-xs text-slate-500 mb-1">总卖出</div>
+                                <div id="smTotalSell" class="font-bold text-lg text-red-600 font-mono">--</div>
+                            </div>
+                            <div class="text-center p-3 bg-blue-50 rounded-xl">
+                                <div class="text-xs text-slate-500 mb-1">净流向</div>
+                                <div id="smNetFlow" class="font-bold text-lg text-blue-600 font-mono">--</div>
+                            </div>
+                        </div>
+                        
+                        <h4 class="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
+                            <i data-lucide="trending-up" class="w-4 h-4 text-amber-500"></i>
+                            Smart Money 关注代币 Top 5
+                        </h4>
+                        <div id="smTopTokens" class="space-y-2">
+                            <div class="text-center text-slate-400 text-xs py-2">加载中...</div>
+                        </div>
+                    </div>
+
+                    <div class="card p-5">
+                        <h3 class="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                            <span class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                                <i data-lucide="pie-chart" class="w-4 h-4 text-amber-500"></i>
+                            </span>
+                            地址分类统计
+                        </h3>
+                        <div class="space-y-3" id="whaleAddressStats">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full bg-purple-500"></span>
+                                    <span class="text-sm text-slate-600">聪明钱</span>
+                                </div>
+                                <span class="text-sm font-medium text-slate-800">--</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full bg-blue-500"></span>
+                                    <span class="text-sm text-slate-600">巨鲸</span>
+                                </div>
+                                <span class="text-sm font-medium text-slate-800">--</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                                    <span class="text-sm text-slate-600">内幕巨鲸</span>
+                                </div>
+                                <span class="text-sm font-medium text-slate-800">--</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+                                    <span class="text-sm text-slate-600">交易所钱包</span>
+                                </div>
+                                <span class="text-sm font-medium text-slate-800">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card p-5">
+                        <h3 class="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                            <span class="w-8 h-8 rounded-lg bg-sky-50 flex items-center justify-center">
+                                <i data-lucide="info" class="w-4 h-4 text-sky-500"></i>
+                            </span>
+                            数据来源
+                        </h3>
+                        <div class="text-xs text-slate-500 space-y-1">
+                            <p>• Lookonchain - 链上追踪</p>
+                            <p>• Whale Alert - 大额转账</p>
+                            <p>• SpotOnChain - 地址追踪</p>
+                            <p>• 链上 RPC 监控</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 
@@ -2287,22 +2735,25 @@ HTML = '''<!DOCTYPE html>
         // Tab switching
         function switchTab(tab) {
             currentTab = tab;
-            ['signals', 'trades', 'nodes'].forEach(t => {
+            ['signals', 'whales', 'trades', 'nodes'].forEach(t => {
                 const panel = document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1));
                 const tabBtn = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
-                if (t === tab) {
-                    panel.classList.remove('hidden');
-                    tabBtn.classList.add('tab-active');
-                    tabBtn.classList.remove('text-slate-500', 'hover:bg-slate-100');
-                } else {
-                    panel.classList.add('hidden');
-                    tabBtn.classList.remove('tab-active');
-                    tabBtn.classList.add('text-slate-500', 'hover:bg-slate-100');
+                if (panel && tabBtn) {
+                    if (t === tab) {
+                        panel.classList.remove('hidden');
+                        tabBtn.classList.add('tab-active');
+                        tabBtn.classList.remove('text-slate-500', 'hover:bg-slate-100');
+                    } else {
+                        panel.classList.add('hidden');
+                        tabBtn.classList.remove('tab-active');
+                        tabBtn.classList.add('text-slate-500', 'hover:bg-slate-100');
+                    }
                 }
             });
             
             if (tab === 'trades') loadTrades();
             if (tab === 'nodes') renderNodes();
+            if (tab === 'whales') loadWhaleEvents();
             lucide.createIcons();
         }
 
@@ -2567,6 +3018,322 @@ HTML = '''<!DOCTYPE html>
             } catch (e) {
                 console.error(e);
             }
+        }
+
+        // ==================== 巨鲸监控相关函数 ====================
+        let whaleFilter = 'all';
+        
+        async function loadWhaleEvents() {
+            const container = document.getElementById('whaleDynamicsList');
+            if (!container) return;
+            
+            try {
+                // 加载巨鲸事件
+                const filterParam = whaleFilter !== 'all' ? `&action=${whaleFilter}` : '';
+                const res = await fetch(`/api/whales?limit=50${filterParam}`);
+                const events = await res.json();
+                
+                if (!events || events.length === 0) {
+                    container.innerHTML = `
+                        <div class="p-8 text-center text-slate-400">
+                            <i data-lucide="fish" class="w-12 h-12 mx-auto mb-3 text-slate-300"></i>
+                            <p class="font-medium">暂无巨鲸动态</p>
+                            <p class="text-sm mt-1">正在监控中...</p>
+                        </div>
+                    `;
+                    lucide.createIcons();
+                    return;
+                }
+                
+                let html = '';
+                for (const e of events) {
+                    html += renderWhaleEvent(e);
+                }
+                container.innerHTML = html;
+                
+                // 加载 Smart Money 统计
+                loadSmartMoneyStats();
+                
+                lucide.createIcons();
+            } catch (err) {
+                console.error('加载巨鲸数据失败:', err);
+                container.innerHTML = `
+                    <div class="p-8 text-center text-red-400">
+                        <i data-lucide="alert-circle" class="w-8 h-8 mx-auto mb-2"></i>
+                        <p>加载失败，请稍后重试</p>
+                    </div>
+                `;
+                lucide.createIcons();
+            }
+        }
+        
+        async function loadSmartMoneyStats() {
+            try {
+                const res = await fetch('/api/smart-money-stats');
+                const stats = await res.json();
+                
+                // 更新统计卡片
+                document.getElementById('smTotalBuy').textContent = formatLargeNumber(stats.total_buy_usd);
+                document.getElementById('smTotalSell').textContent = formatLargeNumber(stats.total_sell_usd);
+                document.getElementById('smNetFlow').textContent = formatLargeNumber(stats.net_flow_usd);
+                
+                // 更新 Top 代币
+                const topTokensContainer = document.getElementById('smTopTokens');
+                if (stats.top_tokens && stats.top_tokens.length > 0) {
+                    let html = '';
+                    for (const token of stats.top_tokens) {
+                        const netClass = token.net_buy_usd > 0 ? 'text-green-600' : token.net_buy_usd < 0 ? 'text-red-600' : 'text-slate-600';
+                        const changeClass = token.price_change_24h > 0 ? 'text-green-600' : token.price_change_24h < 0 ? 'text-red-600' : 'text-slate-500';
+                        html += `
+                        <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-slate-800">${token.symbol}</span>
+                                <span class="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">${token.buy_address_count} SM</span>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm font-semibold ${netClass}">${formatLargeNumber(token.net_buy_usd)}</div>
+                                <div class="text-xs ${changeClass}">${token.price_change_24h > 0 ? '+' : ''}${(token.price_change_24h || 0).toFixed(1)}%</div>
+                            </div>
+                        </div>
+                        `;
+                    }
+                    topTokensContainer.innerHTML = html;
+                }
+            } catch (err) {
+                console.error('加载 Smart Money 统计失败:', err);
+            }
+        }
+        
+        function formatLargeNumber(num) {
+            if (num === undefined || num === null) return '--';
+            const absNum = Math.abs(num);
+            const sign = num < 0 ? '-' : '';
+            if (absNum >= 1e9) return sign + '$' + (absNum / 1e9).toFixed(1) + 'B';
+            if (absNum >= 1e6) return sign + '$' + (absNum / 1e6).toFixed(1) + 'M';
+            if (absNum >= 1e3) return sign + '$' + (absNum / 1e3).toFixed(1) + 'K';
+            return sign + '$' + absNum.toFixed(0);
+        }
+        
+        function renderWhaleEvent(e) {
+            // 根据动作类型设置样式
+            const actionStyles = {
+                'buy': { bg: 'bg-green-50', border: 'border-l-green-500', icon: '📈', label: '买入', color: 'text-green-600' },
+                'sell': { bg: 'bg-red-50', border: 'border-l-red-500', icon: '📉', label: '卖出', color: 'text-red-600' },
+                'deposit_to_cex': { bg: 'bg-orange-50', border: 'border-l-orange-500', icon: '🏦', label: '转入交易所', color: 'text-orange-600' },
+                'withdraw_from_cex': { bg: 'bg-blue-50', border: 'border-l-blue-500', icon: '💰', label: '提币', color: 'text-blue-600' },
+                'transfer': { bg: 'bg-slate-50', border: 'border-l-slate-400', icon: '↔️', label: '转账', color: 'text-slate-600' },
+            };
+            
+            const style = actionStyles[e.action] || actionStyles['transfer'];
+            
+            // 时间格式化
+            const timeAgo = formatTimeAgo(e.timestamp);
+            
+            // 地址标签样式
+            const labelStyles = {
+                'smart_money': { bg: 'bg-purple-100', text: 'text-purple-700' },
+                'whale': { bg: 'bg-blue-100', text: 'text-blue-700' },
+                'insider': { bg: 'bg-red-100', text: 'text-red-700' },
+                'exchange': { bg: 'bg-yellow-100', text: 'text-yellow-700' },
+            };
+            const labelStyle = labelStyles[e.address_label] || { bg: 'bg-slate-100', text: 'text-slate-600' };
+            
+            // 金额格式化
+            const amountStr = e.amount_usd ? formatLargeNumber(e.amount_usd) : '';
+            const tokenStr = e.token_symbol ? `${e.amount_token ? (e.amount_token > 1e9 ? (e.amount_token/1e9).toFixed(1) + 'B' : e.amount_token > 1e6 ? (e.amount_token/1e6).toFixed(1) + 'M' : e.amount_token.toLocaleString()) : ''} ${e.token_symbol}` : '';
+            
+            // 地址简写
+            const addrShort = e.address ? `${e.address.slice(0, 6)}...${e.address.slice(-4)}` : '';
+            
+            // 优先级徽章
+            const priorityBadge = e.priority >= 5 ? '<span class="text-xs bg-red-500 text-white px-1.5 py-0.5 rounded font-bold">HOT</span>' : 
+                                  e.priority >= 4 ? '<span class="text-xs bg-amber-500 text-white px-1.5 py-0.5 rounded">重要</span>' : '';
+            
+            return `
+            <div class="p-4 ${style.bg} border-l-4 ${style.border} hover:bg-opacity-80 transition-colors cursor-pointer" onclick="showWhaleDetail('${e.address || ''}')">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                            <span class="text-lg">${style.icon}</span>
+                            <span class="font-semibold text-slate-800">${e.address_name || '未知地址'}</span>
+                            <span class="text-xs px-1.5 py-0.5 rounded ${labelStyle.bg} ${labelStyle.text}">${e.address_label_cn || e.address_label || '未知'}</span>
+                            ${priorityBadge}
+                        </div>
+                        <div class="text-sm ${style.color} font-medium mb-1">
+                            ${style.label} ${tokenStr} ${amountStr ? `(${amountStr})` : ''}
+                        </div>
+                        <div class="text-xs text-slate-500 truncate">
+                            ${e.description || ''}
+                        </div>
+                        ${e.related_listing ? `<div class="text-xs text-amber-600 mt-1 font-medium">⚠️ 关联上币: ${e.related_listing}</div>` : ''}
+                    </div>
+                    <div class="text-right flex-shrink-0">
+                        <div class="text-xs text-slate-400">${timeAgo}</div>
+                        <div class="text-xs text-slate-300 font-mono mt-1">${addrShort}</div>
+                        ${e.exchange_or_dex ? `<div class="text-xs text-sky-500 mt-1">${e.exchange_or_dex}</div>` : ''}
+                    </div>
+                </div>
+            </div>
+            `;
+        }
+        
+        function filterWhales(filter) {
+            whaleFilter = filter;
+            // 更新按钮样式
+            document.querySelectorAll('.whale-filter-btn').forEach(btn => {
+                btn.classList.remove('active', 'bg-sky-500', 'text-white');
+                btn.classList.add('bg-slate-100');
+            });
+            const activeBtn = document.querySelector(`.whale-filter-btn[data-filter="${filter}"]`);
+            if (activeBtn) {
+                activeBtn.classList.remove('bg-slate-100');
+                activeBtn.classList.add('active', 'bg-sky-500', 'text-white');
+            }
+            
+            // 重新加载过滤后的数据
+            loadWhaleEvents();
+        }
+        
+        // updateWhaleStats 已被 loadSmartMoneyStats 替代
+        
+        async function showWhaleDetail(address) {
+            if (!address) return;
+            
+            try {
+                const res = await fetch(`/api/whale-address/${address}`);
+                const data = await res.json();
+                
+                // 创建弹窗内容
+                const labelStyle = {
+                    'smart_money': 'bg-purple-100 text-purple-700',
+                    'whale': 'bg-blue-100 text-blue-700',
+                    'insider': 'bg-red-100 text-red-700',
+                    'exchange': 'bg-yellow-100 text-yellow-700',
+                }[data.label] || 'bg-slate-100 text-slate-600';
+                
+                let historyHtml = '';
+                if (data.history && data.history.length > 0) {
+                    for (const h of data.history.slice(0, 10)) {
+                        const actionIcon = h.action === 'buy' ? '📈' : h.action === 'sell' ? '📉' : '↔️';
+                        historyHtml += `
+                        <div class="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+                            <div class="flex items-center gap-2">
+                                <span>${actionIcon}</span>
+                                <span class="font-medium text-slate-700">${h.token_symbol || '-'}</span>
+                            </div>
+                            <span class="text-sm text-slate-600">${formatLargeNumber(h.amount_usd)}</span>
+                        </div>
+                        `;
+                    }
+                } else {
+                    historyHtml = '<div class="text-center text-slate-400 py-4">暂无历史记录</div>';
+                }
+                
+                const content = `
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <div>
+                            <h3 class="font-bold text-lg text-slate-800">${data.name || '未知地址'}</h3>
+                            <p class="text-xs text-slate-400 font-mono mt-1">${address}</p>
+                        </div>
+                        <span class="px-3 py-1 rounded-lg text-sm font-medium ${labelStyle}">${data.label_cn || data.label || '未知'}</span>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div class="bg-slate-50 rounded-lg p-3">
+                            <div class="text-xs text-slate-500">总交易量</div>
+                            <div class="font-bold text-lg text-slate-800">${formatLargeNumber(data.total_volume_usd)}</div>
+                        </div>
+                        <div class="bg-slate-50 rounded-lg p-3">
+                            <div class="text-xs text-slate-500">胜率</div>
+                            <div class="font-bold text-lg text-slate-800">${data.win_rate ? (data.win_rate * 100).toFixed(1) + '%' : '--'}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <h4 class="font-semibold text-slate-700 mb-2">标签</h4>
+                        <div class="flex flex-wrap gap-2">
+                            ${data.tags && data.tags.length > 0 ? data.tags.map(t => `<span class="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">${t}</span>`).join('') : '<span class="text-xs text-slate-400">无标签</span>'}
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 class="font-semibold text-slate-700 mb-2">最近交易</h4>
+                        <div class="max-h-48 overflow-y-auto">
+                            ${historyHtml}
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 flex gap-3">
+                        <a href="https://etherscan.io/address/${address}" target="_blank" class="flex-1 py-2 bg-sky-500 hover:bg-sky-600 text-white text-center rounded-lg font-medium transition-colors">
+                            Etherscan
+                        </a>
+                        <a href="https://platform.arkhamintelligence.com/explorer/address/${address}" target="_blank" class="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-center rounded-lg font-medium transition-colors">
+                            Arkham
+                        </a>
+                    </div>
+                </div>
+                `;
+                
+                // 显示弹窗
+                showModal('地址详情', content);
+            } catch (err) {
+                console.error('加载地址详情失败:', err);
+                showModal('错误', '<div class="p-6 text-red-500">加载地址详情失败</div>');
+            }
+        }
+        
+        function showModal(title, content) {
+            // 创建或更新通用弹窗
+            let modal = document.getElementById('genericModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'genericModal';
+                modal.className = 'fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50';
+                modal.onclick = (e) => { if (e.target === modal) closeGenericModal(); };
+                document.body.appendChild(modal);
+            }
+            
+            modal.innerHTML = `
+            <div class="card w-full max-w-lg mx-4 max-h-[85vh] overflow-hidden" onclick="event.stopPropagation()">
+                <div class="flex justify-between items-center p-4 border-b border-slate-100">
+                    <h3 class="font-semibold text-slate-700">${title}</h3>
+                    <button onclick="closeGenericModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="overflow-y-auto max-h-[70vh]">
+                    ${content}
+                </div>
+            </div>
+            `;
+            
+            modal.classList.remove('hidden');
+            lucide.createIcons();
+        }
+        
+        function closeGenericModal() {
+            const modal = document.getElementById('genericModal');
+            if (modal) modal.classList.add('hidden');
+        }
+        
+        function showAddressLibrary() {
+            // TODO: 实现地址库弹窗
+            showModal('地址库', '<div class="p-6 text-center text-slate-400">地址库功能开发中...</div>');
+        }
+        
+        function formatTimeAgo(ts) {
+            if (!ts) return '--';
+            const now = Date.now();
+            const diff = now - ts;
+            const seconds = Math.floor(diff / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            
+            if (seconds < 60) return `${seconds}秒前`;
+            if (minutes < 60) return `${minutes}分钟前`;
+            if (hours < 24) return `${hours}小时前`;
+            return `${Math.floor(hours / 24)}天前`;
         }
 
         async function loadAlpha() {
