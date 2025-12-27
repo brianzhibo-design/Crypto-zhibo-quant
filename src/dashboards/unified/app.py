@@ -488,7 +488,7 @@ def get_insight():
 请分析市场趋势，重点关注：1) 新上币的交易所分布 2) 热门币种 3) 是否有异常活动"""
 
                 response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model="claude-haiku-4-5-20241022",
                     max_tokens=150,
                     messages=[
                         {"role": "user", "content": prompt}
