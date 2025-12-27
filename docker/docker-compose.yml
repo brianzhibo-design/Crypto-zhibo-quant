@@ -53,7 +53,11 @@ services:
       --maxmemory-policy allkeys-lru
       --save 900 1
       --save 300 10
+      --save 60 10000
       --appendonly yes
+      --appendfsync everysec
+      --auto-aof-rewrite-percentage 100
+      --auto-aof-rewrite-min-size 64mb
       --tcp-backlog 511
       --timeout 0
       --tcp-keepalive 300
@@ -62,6 +66,7 @@ services:
       --io-threads-do-reads yes
     volumes:
       - redis_data:/data
+      - ../backups/redis:/backup
     networks:
       - crypto_net
     ports:
@@ -95,7 +100,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-crypto}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CryptoMonitor2025}
       POSTGRES_DB: ${POSTGRES_DB:-crypto}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --data-checksums"
     command:
       - "postgres"
       - "-c"
@@ -120,9 +125,18 @@ services:
       - "wal_buffers=16MB"
       - "-c"
       - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_level=replica"
+      - "-c"
+      - "max_wal_size=1GB"
+      - "-c"
+      - "min_wal_size=80MB"
+      - "-c"
+      - "archive_mode=off"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ../scripts/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ../backups/postgres:/backup
     ports:
       - "5432:5432"
     networks:

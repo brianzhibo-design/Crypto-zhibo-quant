@@ -104,15 +104,75 @@ docker stats --no-stream --format "  {{.Name}}: CPU {{.CPUPerc}}, MEM {{.MemUsag
 echo -e "\n${YELLOW}[6] Redis Stream${NC}"
 RAW_LEN=$(docker exec crypto-redis redis-cli -a "$REDIS_PASSWORD" xlen events:raw 2>/dev/null || echo "0")
 FUSED_LEN=$(docker exec crypto-redis redis-cli -a "$REDIS_PASSWORD" xlen events:fused 2>/dev/null || echo "0")
-echo -e "  events:raw:   ${BLUE}$RAW_LEN${NC} 条"
-echo -e "  events:fused: ${BLUE}$FUSED_LEN${NC} 条"
+WHALE_LEN=$(docker exec crypto-redis redis-cli -a "$REDIS_PASSWORD" xlen whales:dynamics 2>/dev/null || echo "0")
+echo -e "  events:raw:      ${BLUE}$RAW_LEN${NC} 条"
+echo -e "  events:fused:    ${BLUE}$FUSED_LEN${NC} 条"
+echo -e "  whales:dynamics: ${BLUE}$WHALE_LEN${NC} 条"
+
+# 7. 备份状态
+echo -e "\n${YELLOW}[7] 备份状态${NC}"
+BACKUP_DIR="$PROJECT_DIR/backups"
+
+# PostgreSQL 备份
+LATEST_PG=$(ls -t "$BACKUP_DIR/postgres"/crypto_pg_*.sql.gz 2>/dev/null | head -1)
+if [ -n "$LATEST_PG" ]; then
+    PG_SIZE=$(du -h "$LATEST_PG" | cut -f1)
+    PG_AGE=$(( ($(date +%s) - $(stat -c %Y "$LATEST_PG" 2>/dev/null || stat -f %m "$LATEST_PG" 2>/dev/null || echo 0)) / 3600 ))
+    if [ "$PG_AGE" -lt 48 ]; then
+        echo -e "  ${GREEN}✓${NC} PostgreSQL: $(basename "$LATEST_PG") ($PG_SIZE, ${PG_AGE}h 前)"
+    else
+        echo -e "  ${YELLOW}⚠${NC} PostgreSQL: 备份过期 (${PG_AGE}h 前)"
+    fi
+else
+    echo -e "  ${RED}✗${NC} PostgreSQL: 无备份"
+    ((ERRORS++))
+fi
+
+# Redis 备份
+LATEST_REDIS=$(ls -t "$BACKUP_DIR/redis"/crypto_redis_*.rdb.gz 2>/dev/null | head -1)
+if [ -n "$LATEST_REDIS" ]; then
+    REDIS_SIZE=$(du -h "$LATEST_REDIS" | cut -f1)
+    REDIS_AGE=$(( ($(date +%s) - $(stat -c %Y "$LATEST_REDIS" 2>/dev/null || stat -f %m "$LATEST_REDIS" 2>/dev/null || echo 0)) / 3600 ))
+    if [ "$REDIS_AGE" -lt 12 ]; then
+        echo -e "  ${GREEN}✓${NC} Redis: $(basename "$LATEST_REDIS") ($REDIS_SIZE, ${REDIS_AGE}h 前)"
+    else
+        echo -e "  ${YELLOW}⚠${NC} Redis: 备份过期 (${REDIS_AGE}h 前)"
+    fi
+else
+    echo -e "  ${RED}✗${NC} Redis: 无备份"
+    ((ERRORS++))
+fi
+
+# 8. 磁盘空间
+echo -e "\n${YELLOW}[8] 系统资源${NC}"
+DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+if [ "$DISK_USAGE" -lt 80 ]; then
+    echo -e "  ${GREEN}✓${NC} 磁盘使用: ${DISK_USAGE}%"
+elif [ "$DISK_USAGE" -lt 90 ]; then
+    echo -e "  ${YELLOW}⚠${NC} 磁盘使用: ${DISK_USAGE}% (警告)"
+else
+    echo -e "  ${RED}✗${NC} 磁盘使用: ${DISK_USAGE}% (危险)"
+    ((ERRORS++))
+fi
+
+MEM_USAGE=$(free 2>/dev/null | awk '/Mem:/ {printf("%.0f", $3/$2 * 100)}' || echo "0")
+if [ "$MEM_USAGE" -gt 0 ]; then
+    if [ "$MEM_USAGE" -lt 85 ]; then
+        echo -e "  ${GREEN}✓${NC} 内存使用: ${MEM_USAGE}%"
+    elif [ "$MEM_USAGE" -lt 95 ]; then
+        echo -e "  ${YELLOW}⚠${NC} 内存使用: ${MEM_USAGE}% (警告)"
+    else
+        echo -e "  ${RED}✗${NC} 内存使用: ${MEM_USAGE}% (危险)"
+        ((ERRORS++))
+    fi
+fi
 
 # 结果
 echo -e "\n${BLUE}================================================${NC}"
 if [ $ERRORS -eq 0 ]; then
-    echo -e "${GREEN}   所有检查通过！${NC}"
+    echo -e "${GREEN}   ✅ 所有检查通过！${NC}"
 else
-    echo -e "${RED}   发现 $ERRORS 个问题${NC}"
+    echo -e "${RED}   ❌ 发现 $ERRORS 个问题${NC}"
 fi
 echo -e "${BLUE}================================================${NC}"
 

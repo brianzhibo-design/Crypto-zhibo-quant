@@ -1,0 +1,46 @@
+# ============================================================
+# Crypto Monitor - 定时任务配置
+# ============================================================
+# 安装方法: 
+#   sudo cp crypto-backup.cron /etc/cron.d/crypto-backup
+#   sudo chmod 644 /etc/cron.d/crypto-backup
+# 
+# 或者添加到 crontab:
+#   crontab -e
+#   然后复制下面的内容
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=""
+
+# ============================================================
+# 备份任务
+# ============================================================
+
+# PostgreSQL 完整备份 - 每天凌晨 3 点
+0 3 * * * root /root/v8.3_crypto_monitor/scripts/backup_postgres.sh >> /var/log/crypto-backup.log 2>&1
+
+# Redis 快照备份 - 每 6 小时
+0 */6 * * * root /root/v8.3_crypto_monitor/scripts/backup_redis.sh >> /var/log/crypto-backup.log 2>&1
+
+# 完整备份 (PG + Redis + Config) - 每周日凌晨 2 点
+0 2 * * 0 root /root/v8.3_crypto_monitor/scripts/backup_all.sh >> /var/log/crypto-backup.log 2>&1
+
+# 清理旧备份 - 每天凌晨 4 点
+0 4 * * * root /root/v8.3_crypto_monitor/scripts/backup_all.sh --clean >> /var/log/crypto-backup.log 2>&1
+
+# ============================================================
+# 健康检查
+# ============================================================
+
+# 健康检查 - 每 5 分钟
+*/5 * * * * root /root/v8.3_crypto_monitor/scripts/health-check.sh > /dev/null 2>&1 || /root/v8.3_crypto_monitor/scripts/alert_health.sh
+
+# ============================================================
+# 日志轮转
+# ============================================================
+
+# 清理旧日志 - 每天凌晨 5 点
+0 5 * * * root find /root/v8.3_crypto_monitor/logs -name "*.log" -mtime +7 -delete
+0 5 * * * root find /var/log -name "crypto-*.log" -mtime +30 -delete
+

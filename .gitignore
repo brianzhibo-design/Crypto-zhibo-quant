@@ -1,5 +1,10 @@
 # 备份文件 (大文件，不推送)
-backups/
+backups/*.gz
+backups/*.sql
+backups/*.rdb
+backups/postgres/
+backups/redis/
+backups/config/
 
 # Python
 __pycache__/

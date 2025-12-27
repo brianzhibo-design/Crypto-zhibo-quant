@@ -1,0 +1,10 @@
+# 备份目录
+# 此目录用于存放数据库和 Redis 备份文件
+# 备份文件不应该提交到 Git
+
+# 目录结构:
+# backups/
+# ├── postgres/     PostgreSQL 备份
+# ├── redis/        Redis RDB 备份
+# └── config/       配置文件备份
+
